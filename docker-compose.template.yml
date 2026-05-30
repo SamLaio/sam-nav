@@ -1,0 +1,30 @@
+name: sam-nav
+services:
+  sam-nav:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    pull_policy: never
+    image: sam/new-nav:latest
+    container_name: sam-nav
+    hostname: sam-nav
+    restart: unless-stopped
+    env_file:
+      - ./deffault.env
+    ports:
+      - target: 6412
+        published: "${SAM_NAV_PUBLISHED_PORT:-6412}"
+        protocol: tcp
+    volumes:
+      # 僅放執行時資料：SQLite、圖示快取、日誌、產生的密鑰。
+      - type: bind
+        source: ./data
+        target: /app/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:$${SAM_NAV_PORT:-6412}/healthz >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    network_mode: bridge
+    privileged: false

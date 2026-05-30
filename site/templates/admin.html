@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="{{ t "html_lang" }}" data-theme="{{ .DefaultTheme }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ .Title }} {{ t "admin_page_suffix" }}</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <h1>{{ t "admin_heading" }}</h1>
+      <a class="admin-link" href="/">{{ t "nav_home" }}</a>
+    </header>
+
+    <section class="panel">
+      <div class="panel-title">{{ t "links_sort_title" }}</div>
+      <ul id="sortable-links" class="sortable-list" data-sort-log="{{ t "sort_order_changed" }}">
+        <li data-id="example-1"><span class="drag-handle">::</span> {{ t "example_site_a" }}</li>
+        <li data-id="example-2"><span class="drag-handle">::</span> {{ t "example_site_b" }}</li>
+      </ul>
+    </section>
+  </main>
+  <script src="/static/vendor/sortable.min.js"></script>
+  <script src="/static/js/admin-links.js"></script>
+</body>
+</html>

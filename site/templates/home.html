@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="{{ t "html_lang" }}" data-theme="{{ .DefaultTheme }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ .Title }}</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <h1>{{ .Title }}</h1>
+      <a class="admin-link" href="/admin">{{ t "nav_admin" }}</a>
+    </header>
+
+    <section class="search-row">
+      <input id="site-search" type="search" autocomplete="off" placeholder="{{ t "search_placeholder" }}">
+    </section>
+
+    <section class="empty-state">
+      <p>{{ t "home_empty_state" }} <code>data/</code>{{ t "home_empty_state_middle" }} <code>site/</code>{{ t "home_empty_state_end" }}</p>
+    </section>
+  </main>
+  <script src="/static/js/home.js"></script>
+</body>
+</html>
