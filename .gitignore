@@ -8,7 +8,6 @@
 
 *.yml
 !docker-compose.template.yml
-!docker-compose-online.yml
 site/vendor/*
 read/
 AGENTS.md
