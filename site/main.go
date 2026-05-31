@@ -52,9 +52,11 @@ var (
 )
 
 func main() {
+	configureLogging()
+
 	languageProvider := newLanguageProvider(env("SAM_NAV_LANG", defaultLanguageName))
 	text := languageProvider.text
-	appVersion := env("SAM_NAV_VERSION", "v0.2.1")
+	appVersion := env("SAM_NAV_VERSION", "v0.2.2")
 	appBuildHash := buildHash()
 
 	dataDir := env("SAM_NAV_DATA_DIR", "./data")
@@ -189,6 +191,13 @@ func main() {
 	if err := router.Run(":" + port); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func configureLogging() {
+	log.SetOutput(os.Stdout)
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+	gin.DefaultWriter = os.Stdout
+	gin.DefaultErrorWriter = os.Stderr
 }
 
 func env(key, fallback string) string {

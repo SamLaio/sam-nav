@@ -23,7 +23,7 @@ COPY --from=sam-nav-build /out/sam-nav /usr/local/bin/sam-nav
 
 ENV SAM_NAV_BUILD_HASH=${SAM_NAV_BUILD_HASH}
 
-LABEL org.opencontainers.image.version="v0.2.1"
+LABEL org.opencontainers.image.version="v0.2.2"
 
 EXPOSE 6412
 

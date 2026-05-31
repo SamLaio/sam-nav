@@ -17,13 +17,15 @@ services:
       SAM_NAV_BASE_URL: http://127.0.0.1:8085
       # 若部署環境需要覆蓋其他預設值，可取消註解下方設定並調整。
       # SAM_NAV_SITE_TITLE: Sam Nav
-      # SAM_NAV_VERSION: v0.2.1
+      # SAM_NAV_VERSION: v0.2.2
       # SAM_NAV_BUILD_HASH: ""
       # SAM_NAV_DEFAULT_THEME: light
       # SAM_NAV_OPEN_IN_NEW_TAB: "1"
       # SAM_NAV_AUTH_USERNAME: admin
       # SAM_NAV_AUTH_PASSWORD: admin
       # SAM_NAV_AUTH_SECRET_KEY: ""
+      # 限定可顯示後台登入頁的來源網域，空白代表不限制；可用單一 IP、CIDR 或 192.168.50.0~192.168.50.255。
+      # SAM_NAV_AUTH_ALLOWED_NETWORKS: ""
       # PUID: "1000"
       # PGID: "1000"
       # TZ: Asia/Taipei
