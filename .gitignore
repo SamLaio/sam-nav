@@ -39,5 +39,10 @@ opds_*.xml
 release*.md
 todolist.txt
 todo*.txt
+TODO.md
 notes*.txt
 memo*.txt
+
+docker-compose-online.yml
+
+data

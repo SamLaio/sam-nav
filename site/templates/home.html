@@ -4,23 +4,75 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ .Title }}</title>
-  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="/static/css/app.css?v={{ .BuildHash }}">
 </head>
-<body>
+<body {{ if .Background }}style="--page-bg-image: url('{{ .Background }}');"{{ end }}>
   <main class="shell">
     <header class="topbar">
-      <h1>{{ .Title }}</h1>
-      <a class="admin-link" href="/admin">{{ t "nav_admin" }}</a>
+      <div class="title-group">
+        <h1>{{ .Title }}</h1>
+        <span class="version-badge">{{ .Version }}</span>
+      </div>
+      <div class="topbar-actions">
+        <a class="admin-link" href="/admin">{{ t "nav_admin" }}</a>
+      </div>
     </header>
 
     <section class="search-row">
-      <input id="site-search" type="search" autocomplete="off" placeholder="{{ t "search_placeholder" }}">
+      <input id="site-search" type="search" autocomplete="off" placeholder="{{ t "search_placeholder" }}" data-search-engine-url="{{ .Settings.SearchEngineURL }}">
     </section>
 
-    <section class="empty-state">
-      <p>{{ t "home_empty_state" }} <code>data/</code>{{ t "home_empty_state_middle" }} <code>site/</code>{{ t "home_empty_state_end" }}</p>
-    </section>
+    {{ if .Links }}
+      <nav class="category-nav" aria-label="{{ t "category_nav_label" }}">
+        <button class="category-nav-button is-active" type="button" data-category-filter="">{{ t "category_overview" }}</button>
+        {{ range .Categories }}
+          <button class="category-nav-button" type="button" data-category-filter="{{ .Name }}">{{ .Name }}</button>
+        {{ end }}
+      </nav>
+      <section id="home-links" class="link-grid">
+        {{ range .Links }}
+          <a class="link-card" href="{{ .URL }}" {{ if $.OpenNewTab }}target="_blank" rel="noopener noreferrer"{{ end }} data-category="{{ .Category }}" data-search="{{ .Title }} {{ .Category }} {{ .Description }} {{ .URL }}">
+            <span class="link-icon" aria-hidden="true" data-fallback-letter="{{ firstRune .Title }}">{{ if .Icon }}<img src="{{ .Icon }}" alt="">{{ else }}{{ firstRune .Title }}{{ end }}</span>
+            <span class="link-content">
+              <span class="link-title-row">
+                <span class="link-title">{{ .Title }}</span>
+                {{ if .Category }}<span class="link-category">{{ .Category }}</span>{{ end }}
+              </span>
+              {{ if .Description }}<span class="link-description">{{ .Description }}</span>{{ else }}<span class="link-description">{{ .URL }}</span>{{ end }}
+            </span>
+          </a>
+        {{ end }}
+      </section>
+      <section id="search-empty" class="empty-state" hidden>
+        <p>{{ t "search_empty_state" }}</p>
+      </section>
+      {{ if .SearchEngines }}
+        <section id="search-engine-panel" class="search-engine-panel" hidden>
+          <div class="panel-title">{{ t "search_engine_panel_title" }}</div>
+          <div class="home-search-engine-list">
+            {{ range .SearchEngines }}
+              <a class="search-engine-link" href="#" data-search-template="{{ .URL }}">{{ .Name }}</a>
+            {{ end }}
+          </div>
+        </section>
+      {{ end }}
+    {{ else }}
+      <section class="empty-state">
+        <p>{{ t "home_empty_cards" }}</p>
+      </section>
+    {{ end }}
   </main>
-  <script src="/static/js/home.js"></script>
+  <button
+    id="theme-toggle"
+    class="theme-float-button"
+    type="button"
+    data-theme="{{ .DefaultTheme }}"
+    data-light-label="{{ t "theme_light" }}"
+    data-dark-label="{{ t "theme_dark" }}"
+    title="{{ t "button_toggle_theme" }}"
+    aria-label="{{ t "button_toggle_theme" }}"
+  ></button>
+  <script src="/static/js/theme.js?v={{ .BuildHash }}"></script>
+  <script src="/static/js/home.js?v={{ .BuildHash }}"></script>
 </body>
 </html>

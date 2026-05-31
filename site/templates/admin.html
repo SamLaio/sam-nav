@@ -4,24 +4,432 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ .Title }} {{ t "admin_page_suffix" }}</title>
-  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="/static/css/app.css?v={{ .BuildHash }}">
 </head>
-<body>
-  <main class="shell">
+<body {{ if .Background }}style="--page-bg-image: url('{{ .Background }}');"{{ end }}>
+  <main class="shell admin-shell">
     <header class="topbar">
-      <h1>{{ t "admin_heading" }}</h1>
-      <a class="admin-link" href="/">{{ t "nav_home" }}</a>
+      <div class="title-group">
+        <h1>{{ t "admin_heading" }}</h1>
+        <span class="version-badge">{{ .Version }}</span>
+      </div>
+      <div class="topbar-actions">
+        <a class="admin-link" href="/">{{ t "nav_home" }}</a>
+        <form method="post" action="/admin/logout">
+          <button type="submit" class="secondary-button">{{ t "button_logout" }}</button>
+        </form>
+      </div>
     </header>
 
-    <section class="panel">
-      <div class="panel-title">{{ t "links_sort_title" }}</div>
-      <ul id="sortable-links" class="sortable-list" data-sort-log="{{ t "sort_order_changed" }}">
-        <li data-id="example-1"><span class="drag-handle">::</span> {{ t "example_site_a" }}</li>
-        <li data-id="example-2"><span class="drag-handle">::</span> {{ t "example_site_b" }}</li>
-      </ul>
-    </section>
+    <div class="admin-layout">
+      <nav class="admin-sidebar" aria-label="{{ t "admin_nav_label" }}">
+        <button type="button" class="admin-nav-button is-active" data-view-target="boxes">{{ t "nav_boxes" }}</button>
+        <button type="button" class="admin-nav-button" data-view-target="links">{{ t "nav_link_management" }}</button>
+        <button type="button" class="admin-nav-button" data-view-target="search-engines">{{ t "nav_search_management" }}</button>
+        <button type="button" class="admin-nav-button" data-view-target="settings">{{ t "nav_system_settings" }}</button>
+      </nav>
+
+      <section class="admin-content">
+        <section class="admin-view is-active" data-view="boxes">
+          <div class="panel">
+            <div class="panel-heading">
+              <div class="panel-title">{{ t "boxes_title" }}</div>
+              <div class="panel-actions">
+                <span id="box-count" class="status-pill">0</span>
+              </div>
+            </div>
+            <ul id="box-list" class="box-list"></ul>
+            <p id="box-empty" class="empty-inline" hidden>{{ t "boxes_empty" }}</p>
+            <p id="admin-message" class="admin-message" role="status" aria-live="polite"></p>
+          </div>
+        </section>
+
+        <section class="admin-view" data-view="links">
+          <section class="panel">
+            <div class="panel-heading">
+              <div class="panel-title">{{ t "links_sort_title" }}</div>
+              <div class="panel-actions">
+                <label class="filter-field">
+                  <span>{{ t "field_category_filter" }}</span>
+                  <select id="category-filter">
+                    <option value="">{{ t "category_filter_all" }}</option>
+                  </select>
+                </label>
+                <button type="button" data-action="open-create">{{ t "button_create_card" }}</button>
+              </div>
+            </div>
+            <ul
+              id="sortable-links"
+              class="sortable-list"
+              data-error-fallback="{{ t "error_operation_failed" }}"
+              data-status-hidden="{{ t "status_hidden" }}"
+              data-button-edit="{{ t "button_edit" }}"
+              data-button-delete="{{ t "button_delete" }}"
+              data-button-create-card="{{ t "button_create_card" }}"
+              data-button-update-card="{{ t "button_update_card" }}"
+              data-field-is-hidden="{{ t "field_is_hidden" }}"
+              data-field-search-engine-enabled="{{ t "field_search_engine_enabled" }}"
+              data-category-filter-all="{{ t "category_filter_all" }}"
+              data-uncategorized="{{ t "category_uncategorized" }}"
+              data-category-placeholder="{{ t "field_category_select_placeholder" }}"
+              data-category-new-label="{{ t "field_category_new" }}"
+              data-message-card-created="{{ t "message_card_created" }}"
+              data-message-card-updated="{{ t "message_card_updated" }}"
+              data-message-card-deleted="{{ t "message_card_deleted" }}"
+              data-message-category-created="{{ t "message_category_created" }}"
+              data-message-category-updated="{{ t "message_category_updated" }}"
+              data-message-category-deleted="{{ t "message_category_deleted" }}"
+              data-message-settings-updated="{{ t "message_settings_updated" }}"
+              data-message-search-engine-created="{{ t "message_search_engine_created" }}"
+              data-message-search-engine-updated="{{ t "message_search_engine_updated" }}"
+              data-message-search-engine-deleted="{{ t "message_search_engine_deleted" }}"
+              data-message-export-downloaded="{{ t "message_export_downloaded" }}"
+              data-message-import-completed="{{ t "message_import_completed" }}"
+              data-message-export-processing="{{ t "message_export_processing" }}"
+              data-message-import-processing="{{ t "message_import_processing" }}"
+              data-sort-log="{{ t "sort_order_changed" }}"
+              data-confirm-delete-prefix="{{ t "confirm_delete_prefix" }}"
+              data-confirm-delete-suffix="{{ t "confirm_delete_suffix" }}"
+              data-confirm-delete-category-prefix="{{ t "confirm_delete_category_prefix" }}"
+              data-confirm-delete-category-suffix="{{ t "confirm_delete_category_suffix" }}"
+              data-confirm-delete-search-engine-prefix="{{ t "confirm_delete_search_engine_prefix" }}"
+              data-confirm-delete-search-engine-suffix="{{ t "confirm_delete_search_engine_suffix" }}"
+              data-confirm-import-prefix="{{ t "confirm_import_prefix" }}"
+              data-confirm-import-suffix="{{ t "confirm_import_suffix" }}"
+              data-prompt-rename-category="{{ t "prompt_rename_category" }}"
+              data-error-no-import-file="{{ t "error_no_import_file" }}"
+            >
+              {{ range .Links }}
+                <li data-id="{{ .ID }}">
+                  <span class="drag-handle">::</span>
+                  <span class="admin-link-main">
+                    <span class="admin-link-title">{{ .Title }}</span>
+                    <span class="admin-link-url">{{ .URL }}</span>
+                  </span>
+                  <label class="admin-hidden-toggle">
+                    <input type="checkbox" data-action="toggle-hidden" {{ if .Hidden }}checked{{ end }}>
+                    <span>{{ t "field_is_hidden" }}</span>
+                  </label>
+                  <button type="button" class="text-button" data-action="edit">{{ t "button_edit" }}</button>
+                  <button type="button" class="text-button danger-button" data-action="delete">{{ t "button_delete" }}</button>
+                </li>
+              {{ end }}
+            </ul>
+            <p id="admin-empty" class="empty-inline" {{ if .Links }}hidden{{ end }}>{{ t "admin_empty_cards" }}</p>
+          </section>
+        </section>
+
+        <section class="admin-view" data-view="search-engines">
+          <section class="panel">
+            <div class="panel-heading">
+              <div class="panel-title">{{ t "search_management_title" }}</div>
+              <div class="panel-actions">
+                <span id="search-engine-count" class="status-pill">0</span>
+              </div>
+            </div>
+            <ul id="search-engine-list" class="sortable-list search-engine-list"></ul>
+            <p id="search-engine-empty" class="empty-inline" hidden>{{ t "search_engine_empty" }}</p>
+            <p id="search-engine-message" class="admin-message" role="status" aria-live="polite"></p>
+          </section>
+        </section>
+
+        <section class="admin-view" data-view="settings">
+          <section class="panel">
+            <div class="panel-title">{{ t "settings_title" }}</div>
+            <form id="settings-form" class="link-form">
+              <input name="searchEngineURL" type="hidden" value="{{ .Settings.SearchEngineURL }}">
+              <label>
+                <span>{{ t "field_site_title" }}</span>
+                <input name="siteTitle" required autocomplete="off" value="{{ .Settings.SiteTitle }}">
+              </label>
+              <label>
+                <span>{{ t "field_background" }}</span>
+                <input name="background" autocomplete="off" placeholder="{{ t "field_background_placeholder" }}" value="{{ .Settings.Background }}">
+              </label>
+              <label>
+                <span>{{ t "field_default_theme" }}</span>
+                <select name="defaultTheme">
+                  <option value="light" {{ if eq .Settings.DefaultTheme "light" }}selected{{ end }}>{{ t "theme_light" }}</option>
+                  <option value="dark" {{ if eq .Settings.DefaultTheme "dark" }}selected{{ end }}>{{ t "theme_dark" }}</option>
+                </select>
+              </label>
+              <label>
+                <span>{{ t "field_language" }}</span>
+                <select name="language">
+                  <option value="zhTW" {{ if eq .Settings.Language "zhTW" }}selected{{ end }}>正體中文</option>
+                  <option value="en" {{ if eq .Settings.Language "en" }}selected{{ end }}>English</option>
+                </select>
+              </label>
+              <label class="checkbox-field">
+                <input name="openNewTab" type="checkbox" {{ if .Settings.OpenNewTab }}checked{{ end }}>
+                <span>{{ t "field_open_new_tab" }}</span>
+              </label>
+              <div class="form-actions">
+                <button type="submit">{{ t "button_save_settings" }}</button>
+              </div>
+            </form>
+            <p id="settings-message" class="admin-message" role="status" aria-live="polite"></p>
+          </section>
+
+          <section class="panel">
+            <div class="panel-title">{{ t "settings_admin_title" }}</div>
+            <form id="admin-settings-form" class="link-form">
+              <label>
+                <span>{{ t "field_admin_username" }}</span>
+                <input name="adminUsername" required autocomplete="username" value="{{ .Settings.AdminUsername }}">
+              </label>
+              <label>
+                <span>{{ t "field_admin_new_password" }}</span>
+                <input name="newPassword" type="password" autocomplete="new-password">
+              </label>
+              <div class="form-actions">
+                <button type="submit">{{ t "button_save_settings" }}</button>
+              </div>
+            </form>
+            <p id="admin-settings-message" class="admin-message" role="status" aria-live="polite"></p>
+          </section>
+
+          <section id="import-export-panel" class="panel import-export-panel">
+            <div class="panel-title">{{ t "import_export_title" }}</div>
+            <div class="import-export-list">
+              <div class="import-export-item">
+                <div class="import-export-copy">
+                  <strong>{{ t "backup_cards_title" }}</strong>
+                  <span>{{ t "backup_cards_description" }}</span>
+                </div>
+                <div class="import-export-actions">
+                  <button type="button" class="secondary-button" data-export-scope="cards">{{ t "button_export" }}</button>
+                  <button type="button" data-import-scope="cards">{{ t "button_import" }}</button>
+                  <input type="file" accept="application/json,.json" data-import-input="cards" hidden>
+                </div>
+              </div>
+              <div class="import-export-item">
+                <div class="import-export-copy">
+                  <strong>{{ t "backup_settings_title" }}</strong>
+                  <span>{{ t "backup_settings_description" }}</span>
+                </div>
+                <div class="import-export-actions">
+                  <button type="button" class="secondary-button" data-export-scope="settings">{{ t "button_export" }}</button>
+                  <button type="button" data-import-scope="settings">{{ t "button_import" }}</button>
+                  <input type="file" accept="application/json,.json" data-import-input="settings" hidden>
+                </div>
+              </div>
+              <div class="import-export-item">
+                <div class="import-export-copy">
+                  <strong>{{ t "backup_all_title" }}</strong>
+                  <span>{{ t "backup_all_description" }}</span>
+                </div>
+                <div class="import-export-actions">
+                  <button type="button" class="secondary-button" data-export-scope="all">{{ t "button_export" }}</button>
+                  <button type="button" data-import-scope="all">{{ t "button_import" }}</button>
+                  <input type="file" accept="application/json,.json" data-import-input="all" hidden>
+                </div>
+              </div>
+            </div>
+            <p id="import-export-message" class="admin-message" role="status" aria-live="polite"></p>
+          </section>
+        </section>
+      </section>
+
+      <aside class="admin-aside">
+        <div class="panel admin-aside-view is-active" data-aside-view="boxes">
+          <div class="panel-title">{{ t "box_create_title" }}</div>
+          <form id="category-form" class="stack-form">
+            <label>
+              <span>{{ t "field_category" }}</span>
+              <input name="name" required autocomplete="off" placeholder="{{ t "field_category_placeholder" }}">
+            </label>
+            <button type="submit">{{ t "button_create_box" }}</button>
+          </form>
+          <p id="category-message" class="admin-message" role="status" aria-live="polite"></p>
+        </div>
+        <div class="panel admin-aside-view is-active" data-aside-view="boxes">
+          <div class="panel-title">{{ t "nav_boxes" }}</div>
+          <ul id="box-aside-list" class="aside-list"></ul>
+        </div>
+        <div class="panel admin-aside-view" data-aside-view="search-engines">
+          <div class="panel-title">{{ t "search_engine_create_title" }}</div>
+          <form id="search-engine-form" class="stack-form">
+            <label>
+              <span>{{ t "field_search_engine_name" }}</span>
+              <input name="name" required autocomplete="off" placeholder="Google">
+            </label>
+            <label>
+              <span>{{ t "field_search_engine_url" }}</span>
+              <input name="url" required autocomplete="off" placeholder="https://www.google.com/search?q=%s">
+            </label>
+            <label class="checkbox-field">
+              <input name="enabled" type="checkbox" checked>
+              <span>{{ t "field_search_engine_enabled" }}</span>
+            </label>
+            <button type="submit">{{ t "button_create_search_engine" }}</button>
+          </form>
+        </div>
+      </aside>
+    </div>
   </main>
+
+  <dialog id="create-link-dialog" class="modal-dialog">
+    <form id="create-link-form" class="link-form modal-form">
+      <div class="modal-heading">
+        <div class="panel-title">{{ t "link_create_title" }}</div>
+        <button type="button" class="modal-close-button" data-action="cancel-create" aria-label="{{ t "button_close_dialog" }}">x</button>
+      </div>
+      <label>
+        <span>{{ t "field_title" }}</span>
+        <input name="title" required autocomplete="off" placeholder="{{ t "field_title_placeholder" }}">
+      </label>
+      <label>
+        <span>{{ t "field_url" }}</span>
+        <input name="url" required autocomplete="off" placeholder="https://example.com">
+      </label>
+      <label>
+        <span>{{ t "field_description" }}</span>
+        <input name="description" autocomplete="off" placeholder="{{ t "field_description_placeholder" }}">
+      </label>
+      <label>
+        <span>{{ t "field_category" }}</span>
+        <span class="category-combobox" data-category-combobox>
+          <input type="hidden" name="category">
+          <button type="button" class="category-combobox-button" data-category-toggle>{{ t "field_category_select_placeholder" }}</button>
+          <span class="category-combobox-menu" data-category-menu hidden>
+            <span class="category-combobox-options" data-category-options></span>
+            <span class="category-combobox-new">
+              <span>{{ t "field_category_new" }}</span>
+              <input type="text" data-category-new autocomplete="off" placeholder="{{ t "field_category_placeholder" }}">
+            </span>
+          </span>
+        </span>
+      </label>
+      <label>
+        <span>{{ t "field_icon" }}</span>
+        <input name="icon" autocomplete="off" placeholder="{{ t "field_icon_placeholder" }}">
+      </label>
+      <label>
+        <span>{{ t "field_sort" }}</span>
+        <input name="sortOrder" type="number" min="1" step="1" placeholder="1">
+      </label>
+      <label class="checkbox-field">
+        <input name="hidden" type="checkbox">
+        <span>{{ t "field_is_hidden" }}</span>
+      </label>
+      <div class="form-actions">
+        <button type="submit">{{ t "button_create_card" }}</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="edit-link-dialog" class="modal-dialog">
+    <form id="edit-link-form" class="link-form modal-form">
+      <input type="hidden" name="id">
+      <div class="modal-heading">
+        <div class="panel-title">{{ t "link_edit_title" }}</div>
+        <button type="button" class="modal-close-button" data-action="cancel-edit" aria-label="{{ t "button_close_dialog" }}">x</button>
+      </div>
+      <label>
+        <span>{{ t "field_title" }}</span>
+        <input name="title" required autocomplete="off">
+      </label>
+      <label>
+        <span>{{ t "field_url" }}</span>
+        <input name="url" required autocomplete="off">
+      </label>
+      <label>
+        <span>{{ t "field_description" }}</span>
+        <input name="description" autocomplete="off">
+      </label>
+      <label>
+        <span>{{ t "field_category" }}</span>
+        <span class="category-combobox" data-category-combobox>
+          <input type="hidden" name="category">
+          <button type="button" class="category-combobox-button" data-category-toggle>{{ t "field_category_select_placeholder" }}</button>
+          <span class="category-combobox-menu" data-category-menu hidden>
+            <span class="category-combobox-options" data-category-options></span>
+            <span class="category-combobox-new">
+              <span>{{ t "field_category_new" }}</span>
+              <input type="text" data-category-new autocomplete="off" placeholder="{{ t "field_category_placeholder" }}">
+            </span>
+          </span>
+        </span>
+      </label>
+      <label>
+        <span>{{ t "field_icon" }}</span>
+        <input name="icon" autocomplete="off">
+      </label>
+      <label>
+        <span>{{ t "field_sort" }}</span>
+        <input name="sortOrder" type="number" min="1" step="1">
+      </label>
+      <label class="checkbox-field">
+        <input name="hidden" type="checkbox">
+        <span>{{ t "field_is_hidden" }}</span>
+      </label>
+      <div class="form-actions">
+        <button type="submit">{{ t "button_update_card" }}</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="edit-search-engine-dialog" class="modal-dialog operation-complete-dialog">
+    <form id="edit-search-engine-form" class="link-form modal-form">
+      <input type="hidden" name="id">
+      <input type="hidden" name="sortOrder">
+      <div class="modal-heading">
+        <div class="panel-title">{{ t "search_engine_edit_title" }}</div>
+        <button type="button" class="modal-close-button" data-action="cancel-search-engine-edit" aria-label="{{ t "button_close_dialog" }}">x</button>
+      </div>
+      <label>
+        <span>{{ t "field_search_engine_name" }}</span>
+        <input name="name" required autocomplete="off">
+      </label>
+      <label>
+        <span>{{ t "field_search_engine_url" }}</span>
+        <input name="url" required autocomplete="off">
+      </label>
+      <label class="checkbox-field">
+        <input name="enabled" type="checkbox">
+        <span>{{ t "field_search_engine_enabled" }}</span>
+      </label>
+      <div class="form-actions">
+        <button type="submit">{{ t "button_update_search_engine" }}</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="operation-overlay" class="operation-overlay" role="status" aria-live="polite" hidden>
+    <div class="operation-overlay-box">
+      <span class="operation-spinner" aria-hidden="true"></span>
+      <strong>{{ t "message_operation_processing" }}</strong>
+      <span id="operation-overlay-message">{{ t "message_operation_processing" }}</span>
+    </div>
+  </div>
+
+  <dialog id="operation-complete-dialog" class="modal-dialog operation-complete-dialog">
+    <form method="dialog" class="operation-complete-form">
+      <div class="modal-heading">
+        <div class="panel-title">{{ t "operation_complete_title" }}</div>
+        <button type="button" class="modal-close-button" data-action="close-complete-dialog" aria-label="{{ t "button_close_dialog" }}">x</button>
+      </div>
+      <p id="operation-complete-message" class="operation-complete-message"></p>
+      <div class="form-actions">
+        <button type="submit" data-action="close-complete-dialog">{{ t "button_confirm" }}</button>
+      </div>
+    </form>
+  </dialog>
+
+  <button
+    id="theme-toggle"
+    class="theme-float-button"
+    type="button"
+    data-theme="{{ .DefaultTheme }}"
+    data-light-label="{{ t "theme_light" }}"
+    data-dark-label="{{ t "theme_dark" }}"
+    title="{{ t "button_toggle_theme" }}"
+    aria-label="{{ t "button_toggle_theme" }}"
+  ></button>
+  <div class="admin-build-hash" title="{{ t "build_hash_label" }} {{ .BuildHash }}">{{ t "build_hash_label" }} {{ .BuildHash }}</div>
+  <script src="/static/js/theme.js?v={{ .BuildHash }}"></script>
   <script src="/static/vendor/sortable.min.js"></script>
-  <script src="/static/js/admin-links.js"></script>
+  <script src="/static/js/admin-links.js?v={{ .BuildHash }}"></script>
 </body>
 </html>

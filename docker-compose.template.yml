@@ -10,10 +10,28 @@ services:
     hostname: sam-nav
     restart: unless-stopped
     env_file:
-      - ./deffault.env
+      - ./site/deffault.env
+    # 預設環境變數集中放在 ./site/deffault.env。
+    # 若部署環境需要覆蓋特定值，可取消註解下方 environment 區塊並調整。
+    # environment:
+    #   SAM_NAV_PORT: "80"
+    #   SAM_NAV_DATA_DIR: /app/data
+    #   SAM_NAV_DB_PATH: /app/data/nav.sqlite
+    #   SAM_NAV_SITE_TITLE: Sam Nav
+    #   SAM_NAV_VERSION: v0.2
+    #   SAM_NAV_BUILD_HASH: ""
+    #   SAM_NAV_BASE_URL: http://127.0.0.1:8085
+    #   SAM_NAV_DEFAULT_THEME: light
+    #   SAM_NAV_OPEN_IN_NEW_TAB: "1"
+    #   SAM_NAV_AUTH_USERNAME: admin
+    #   SAM_NAV_AUTH_PASSWORD: admin
+    #   SAM_NAV_AUTH_SECRET_KEY: ""
+    #   PUID: "1000"
+    #   PGID: "1000"
+    #   TZ: Asia/Taipei
     ports:
-      - target: 6412
-        published: "${SAM_NAV_PUBLISHED_PORT:-6412}"
+      - target: 80
+        published: "${SAM_NAV_PUBLISHED_PORT:-8085}"
         protocol: tcp
     volumes:
       # 僅放執行時資料：SQLite、圖示快取、日誌、產生的密鑰。
@@ -21,7 +39,7 @@ services:
         source: ./data
         target: /app/data
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:$${SAM_NAV_PORT:-6412}/healthz >/dev/null || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:$${SAM_NAV_PORT:-80}/healthz >/dev/null || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3

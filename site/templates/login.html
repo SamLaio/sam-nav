@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="{{ t "html_lang" }}" data-theme="{{ .DefaultTheme }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ .Title }} {{ t "login_page_suffix" }}</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body {{ if .Background }}style="--page-bg-image: url('{{ .Background }}');"{{ end }}>
+  <main class="auth-shell">
+    <section class="panel auth-panel">
+      <div class="title-group auth-title">
+        <h1>{{ t "login_heading" }}</h1>
+        <span class="version-badge">{{ .Version }}</span>
+      </div>
+      <form class="link-form auth-form" method="post" action="/admin/login">
+        <label>
+          <span>{{ t "field_admin_username" }}</span>
+          <input name="username" required autocomplete="username">
+        </label>
+        <label>
+          <span>{{ t "field_admin_password" }}</span>
+          <input name="password" type="password" required autocomplete="current-password">
+        </label>
+        <div class="form-actions">
+          <button type="submit">{{ t "button_login" }}</button>
+          <a class="secondary-link" href="/">{{ t "nav_home" }}</a>
+        </div>
+      </form>
+      {{ if .Error }}<p class="admin-message is-error">{{ .Error }}</p>{{ end }}
+    </section>
+  </main>
+  <button
+    id="theme-toggle"
+    class="theme-float-button"
+    type="button"
+    data-theme="{{ .DefaultTheme }}"
+    data-light-label="{{ t "theme_light" }}"
+    data-dark-label="{{ t "theme_dark" }}"
+    title="{{ t "button_toggle_theme" }}"
+    aria-label="{{ t "button_toggle_theme" }}"
+  ></button>
+  <script src="/static/js/theme.js"></script>
+</body>
+</html>
