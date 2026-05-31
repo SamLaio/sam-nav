@@ -21,17 +21,13 @@ RUN apk add --no-cache ca-certificates tzdata \
 
 COPY --from=sam-nav-build /out/sam-nav /usr/local/bin/sam-nav
 
-ENV SAM_NAV_PORT=80 \
-    SAM_NAV_DATA_DIR=/app/data \
-    SAM_NAV_DB_PATH=/app/data/nav.sqlite \
-    SAM_NAV_VERSION=v0.2 \
-    SAM_NAV_BUILD_HASH=${SAM_NAV_BUILD_HASH}
+ENV SAM_NAV_BUILD_HASH=${SAM_NAV_BUILD_HASH}
 
-LABEL org.opencontainers.image.version="v0.2"
+LABEL org.opencontainers.image.version="v0.2.1"
 
-EXPOSE 80
+EXPOSE 6412
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget -qO- "http://127.0.0.1:${SAM_NAV_PORT}/healthz" >/dev/null || exit 1
+    CMD wget -qO- "http://127.0.0.1:${SAM_NAV_PORT:-6412}/healthz" >/dev/null || exit 1
 
 ENTRYPOINT ["sam-nav"]

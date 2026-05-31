@@ -9,26 +9,24 @@ services:
     container_name: sam-nav
     hostname: sam-nav
     restart: unless-stopped
-    env_file:
-      - ./site/deffault.env
-    # 預設環境變數集中放在 ./site/deffault.env。
-    # 若部署環境需要覆蓋特定值，可取消註解下方 environment 區塊並調整。
-    # environment:
-    #   SAM_NAV_PORT: "80"
-    #   SAM_NAV_DATA_DIR: /app/data
-    #   SAM_NAV_DB_PATH: /app/data/nav.sqlite
-    #   SAM_NAV_SITE_TITLE: Sam Nav
-    #   SAM_NAV_VERSION: v0.2
-    #   SAM_NAV_BUILD_HASH: ""
-    #   SAM_NAV_BASE_URL: http://127.0.0.1:8085
-    #   SAM_NAV_DEFAULT_THEME: light
-    #   SAM_NAV_OPEN_IN_NEW_TAB: "1"
-    #   SAM_NAV_AUTH_USERNAME: admin
-    #   SAM_NAV_AUTH_PASSWORD: admin
-    #   SAM_NAV_AUTH_SECRET_KEY: ""
-    #   PUID: "1000"
-    #   PGID: "1000"
-    #   TZ: Asia/Taipei
+    environment:
+      # 程式會先讀取內建的 site/deffault.env，這裡只放 Docker 部署需要覆蓋的值。
+      SAM_NAV_PORT: "80"
+      SAM_NAV_DATA_DIR: /app/data
+      SAM_NAV_DB_PATH: /app/data/nav.sqlite
+      SAM_NAV_BASE_URL: http://127.0.0.1:8085
+      # 若部署環境需要覆蓋其他預設值，可取消註解下方設定並調整。
+      # SAM_NAV_SITE_TITLE: Sam Nav
+      # SAM_NAV_VERSION: v0.2.1
+      # SAM_NAV_BUILD_HASH: ""
+      # SAM_NAV_DEFAULT_THEME: light
+      # SAM_NAV_OPEN_IN_NEW_TAB: "1"
+      # SAM_NAV_AUTH_USERNAME: admin
+      # SAM_NAV_AUTH_PASSWORD: admin
+      # SAM_NAV_AUTH_SECRET_KEY: ""
+      # PUID: "1000"
+      # PGID: "1000"
+      # TZ: Asia/Taipei
     ports:
       - target: 80
         published: "${SAM_NAV_PUBLISHED_PORT:-8085}"

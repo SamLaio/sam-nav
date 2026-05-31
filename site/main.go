@@ -10,13 +10,14 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
-//go:embed templates/* static/css/* static/js/* static/vendor/* lang/*.json
+//go:embed templates/* static/css/* static/js/* static/vendor/* lang/*.json deffault.env
 var siteFS embed.FS
 
 type pageData struct {
@@ -43,10 +44,17 @@ type loginData struct {
 
 const defaultLanguageName = "zhTW"
 
+var (
+	defaultEnvOnce sync.Once
+	defaultEnv     map[string]string
+	settingEnvOnce sync.Once
+	settingEnv     map[string]string
+)
+
 func main() {
 	languageProvider := newLanguageProvider(env("SAM_NAV_LANG", defaultLanguageName))
 	text := languageProvider.text
-	appVersion := env("SAM_NAV_VERSION", "v0.1")
+	appVersion := env("SAM_NAV_VERSION", "v0.2.1")
 	appBuildHash := buildHash()
 
 	dataDir := env("SAM_NAV_DATA_DIR", "./data")
@@ -187,7 +195,95 @@ func env(key, fallback string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
 	}
+	if value, ok := settingEnvValue(key); ok {
+		return value
+	}
+	if value, ok := defaultEnvValue(key); ok {
+		return value
+	}
 	return fallback
+}
+
+func settingEnvValue(key string) (string, bool) {
+	settingEnvOnce.Do(func() {
+		settingEnv = readSettingEnv()
+	})
+	value, ok := settingEnv[key]
+	return value, ok
+}
+
+func readSettingEnv() map[string]string {
+	settingPath := settingEnvPath()
+	if settingPath == "" {
+		return map[string]string{}
+	}
+	content, err := os.ReadFile(settingPath)
+	if err != nil {
+		log.Printf("讀取 setting.env 失敗：%v", err)
+		return map[string]string{}
+	}
+	return parseEnvFile(string(content))
+}
+
+func settingEnvPath() string {
+	workingDir, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	if filepath.Base(workingDir) == "site" {
+		candidate := filepath.Join(filepath.Dir(workingDir), "setting.env")
+		if fileExists(candidate) {
+			return candidate
+		}
+		return ""
+	}
+	candidate := filepath.Join(workingDir, "setting.env")
+	if fileExists(candidate) {
+		return candidate
+	}
+	return ""
+}
+
+func defaultEnvValue(key string) (string, bool) {
+	defaultEnvOnce.Do(func() {
+		defaultEnv = readDefaultEnv()
+	})
+	value, ok := defaultEnv[key]
+	return value, ok
+}
+
+func readDefaultEnv() map[string]string {
+	content, err := siteFS.ReadFile("deffault.env")
+	if err != nil {
+		log.Printf("讀取預設環境變數失敗：%v", err)
+		return map[string]string{}
+	}
+	return parseEnvFile(string(content))
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
+func parseEnvFile(content string) map[string]string {
+	values := map[string]string{}
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		values[key] = strings.TrimSpace(value)
+	}
+	return values
 }
 
 func buildHash() string {
