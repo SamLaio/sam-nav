@@ -30,6 +30,7 @@
   const searchEngineCount = document.getElementById("search-engine-count");
   const searchEngineMessage = document.getElementById("search-engine-message");
   const adminLayout = document.querySelector(".admin-layout");
+  const updateIconsButton = document.querySelector('[data-action="update-icons"]');
   if (!list || !createForm || !editForm) return;
 
   let links = [];
@@ -190,6 +191,36 @@
     renderSearchEngines();
   };
 
+  const fallbackIconText = (title) => {
+    return Array.from(String(title || "").trim())[0] || "";
+  };
+
+  const renderLinkIcon = (target, link) => {
+    if (!target) return;
+    target.textContent = "";
+    target.classList.toggle("is-letter-icon", !link.icon);
+    target.dataset.fallbackLetter = fallbackIconText(link.title);
+
+    if (!link.icon) {
+      target.textContent = target.dataset.fallbackLetter;
+      return;
+    }
+
+    const image = document.createElement("img");
+    image.src = `/api/links/${encodeURIComponent(link.id)}/icon`;
+    image.alt = "";
+    image.addEventListener("error", () => {
+      image.remove();
+      target.textContent = target.dataset.fallbackLetter;
+      target.classList.add("is-letter-icon");
+    });
+    target.appendChild(image);
+  };
+
+  const isGeneratedFavicon = (icon) => {
+    return String(icon || "").trim().startsWith("https://www.google.com/s2/favicons?");
+  };
+
   const renderLinks = () => {
     list.innerHTML = "";
     const selectedCategory = categoryFilter ? categoryFilter.value : "";
@@ -203,7 +234,10 @@
       item.innerHTML = `
         <span class="drag-handle">::</span>
         <span class="admin-link-main">
-          <span class="admin-link-title"></span>
+          <span class="admin-link-heading">
+            <span class="admin-link-icon" aria-hidden="true"></span>
+            <span class="admin-link-title"></span>
+          </span>
           <span class="admin-link-url"></span>
         </span>
         <label class="admin-hidden-toggle">
@@ -213,6 +247,7 @@
         <button type="button" class="text-button" data-action="edit"></button>
         <button type="button" class="text-button danger-button" data-action="delete"></button>
       `;
+      renderLinkIcon(item.querySelector(".admin-link-icon"), link);
       item.querySelector(".admin-link-title").textContent = link.title;
       item.querySelector(".admin-link-url").textContent = link.url;
       item.querySelector('[data-action="toggle-hidden"]').checked = Boolean(link.hidden);
@@ -561,7 +596,7 @@
     editForm.elements.url.value = link.url || "";
     editForm.elements.description.value = link.description || "";
     setFormCategory(editForm, link.category || "");
-    editForm.elements.icon.value = link.icon || "";
+    editForm.elements.icon.value = isGeneratedFavicon(link.icon) ? "" : link.icon || "";
     editForm.elements.sortOrder.value = link.sortOrder || "";
     editForm.elements.hidden.checked = Boolean(link.hidden);
     openDialog(editDialog);
@@ -935,6 +970,27 @@
       showMessage(adminSettingsMessage, t("messageSettingsUpdated", "Settings saved"));
     } catch (error) {
       showMessage(adminSettingsMessage, error.message, true);
+    }
+  });
+
+  updateIconsButton?.addEventListener("click", async () => {
+    showMessage(settingsMessage, "");
+    updateIconsButton.disabled = true;
+    showOperationOverlay(t("messageIconsUpdating", "Updating icons..."));
+    try {
+      const result = await requestJSON("/api/admin/links/icons", {
+        method: "PUT"
+      });
+      await loadLinks();
+      const updated = Number(result?.updated) || 0;
+      const completeMessage = `${t("messageIconsUpdated", "Icons updated")} (${updated})`;
+      hideOperationOverlay();
+      showMessage(settingsMessage, completeMessage);
+    } catch (error) {
+      hideOperationOverlay();
+      showMessage(settingsMessage, error.message, true);
+    } finally {
+      updateIconsButton.disabled = false;
     }
   });
 

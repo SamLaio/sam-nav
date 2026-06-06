@@ -44,14 +44,15 @@ type backupImportFile struct {
 	Engines        []searchEngine `json:"engines"`
 }
 
-func registerBackupRoutes(admin *gin.RouterGroup, db *sql.DB, text textFunc, applyLanguage func(string) string) {
+func registerBackupRoutes(admin *gin.RouterGroup, db *sql.DB, text textFunc, applyLanguage func(string) string, iconCacheDirs ...string) {
+	iconCacheDir := firstIconCacheDir(iconCacheDirs...)
 	admin.GET("/export/:scope", func(c *gin.Context) {
 		scope := normalizeBackupScope(c.Param("scope"))
 		if scope == "" {
 			jsonError(c, http.StatusBadRequest, errors.New(text("error_invalid_backup_scope")))
 			return
 		}
-		backup, err := exportBackup(c.Request.Context(), db, scope)
+		backup, err := exportBackup(c.Request.Context(), db, scope, text)
 		if err != nil {
 			jsonError(c, http.StatusInternalServerError, err)
 			return
@@ -77,7 +78,7 @@ func registerBackupRoutes(admin *gin.RouterGroup, db *sql.DB, text textFunc, app
 			jsonError(c, http.StatusBadRequest, err)
 			return
 		}
-		settings, err := importBackup(c.Request.Context(), db, scope, backup, text)
+		settings, err := importBackup(c.Request.Context(), db, scope, backup, text, iconCacheDir)
 		if err != nil {
 			jsonError(c, http.StatusBadRequest, err)
 			return
@@ -98,7 +99,7 @@ func normalizeBackupScope(scope string) string {
 	}
 }
 
-func exportBackup(ctx context.Context, db *sql.DB, scope string) (backupFile, error) {
+func exportBackup(ctx context.Context, db *sql.DB, scope string, text textFunc) (backupFile, error) {
 	backup := backupFile{
 		Version:    backupVersion,
 		App:        "sam-nav",
@@ -114,6 +115,7 @@ func exportBackup(ctx context.Context, db *sql.DB, scope string) (backupFile, er
 		if err != nil {
 			return backupFile{}, err
 		}
+		links = normalizeBackupLinkIcons(ctx, links)
 		backup.Categories = categories
 		backup.Links = links
 	}
@@ -170,12 +172,13 @@ func (backup *backupImportFile) normalizeAliases() {
 	}
 }
 
-func importBackup(ctx context.Context, db *sql.DB, scope string, backup backupImportFile, text textFunc) (appSettings, error) {
+func importBackup(ctx context.Context, db *sql.DB, scope string, backup backupImportFile, text textFunc, iconCacheDirs ...string) (appSettings, error) {
+	iconCacheDir := firstIconCacheDir(iconCacheDirs...)
 	if !backupScopeAllowsImport(backup.Scope, scope) {
 		return appSettings{}, errors.New(text("error_invalid_backup_scope"))
 	}
 	if scope == "cards" || scope == "all" {
-		if err := importCardsBackup(ctx, db, backup.Categories, backup.Links, text); err != nil {
+		if err := importCardsBackup(ctx, db, backup.Categories, backup.Links, text, iconCacheDir); err != nil {
 			return appSettings{}, err
 		}
 	}
@@ -205,8 +208,9 @@ func backupScopeAllowsImport(fileScope, requestedScope string) bool {
 	return fileScope == requestedScope || fileScope == "all"
 }
 
-func importCardsBackup(ctx context.Context, db *sql.DB, categories []categoryBox, links []linkCard, text textFunc) error {
-	preparedCategories, preparedLinks, err := prepareCardsBackup(categories, links, text)
+func importCardsBackup(ctx context.Context, db *sql.DB, categories []categoryBox, links []linkCard, text textFunc, iconCacheDirs ...string) error {
+	iconCacheDir := firstIconCacheDir(iconCacheDirs...)
+	preparedCategories, preparedLinks, err := prepareCardsBackup(ctx, categories, links, text)
 	if err != nil {
 		return err
 	}
@@ -235,6 +239,7 @@ func importCardsBackup(ctx context.Context, db *sql.DB, categories []categoryBox
 		}
 	}
 
+	importedLinks := make([]linkCard, 0, len(preparedLinks))
 	for _, link := range preparedLinks {
 		if link.ID > 0 {
 			if _, err := tx.ExecContext(
@@ -252,9 +257,10 @@ func importCardsBackup(ctx context.Context, db *sql.DB, categories []categoryBox
 			); err != nil {
 				return err
 			}
+			importedLinks = append(importedLinks, link)
 			continue
 		}
-		if _, err := tx.ExecContext(
+		result, err := tx.ExecContext(
 			ctx,
 			`INSERT INTO nav_links (title, url, description, category, icon, sort_order, hidden, updated_at)
 			 VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP);`,
@@ -265,14 +271,24 @@ func importCardsBackup(ctx context.Context, db *sql.DB, categories []categoryBox
 			link.Icon,
 			link.SortOrder,
 			link.Hidden,
-		); err != nil {
+		)
+		if err != nil {
 			return err
 		}
+		link.ID, _ = result.LastInsertId()
+		importedLinks = append(importedLinks, link)
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	clearLinkIconCache(iconCacheDir)
+	for _, link := range importedLinks {
+		_ = refreshLinkIconCache(ctx, iconCacheDir, link, true)
+	}
+	return nil
 }
 
-func prepareCardsBackup(categories []categoryBox, links []linkCard, text textFunc) ([]categoryBox, []linkCard, error) {
+func prepareCardsBackup(ctx context.Context, categories []categoryBox, links []linkCard, text textFunc) ([]categoryBox, []linkCard, error) {
 	categoryOrders := map[string]int{}
 	nextCategoryOrder := 1
 	for _, category := range categories {
@@ -298,9 +314,7 @@ func prepareCardsBackup(categories []categoryBox, links []linkCard, text textFun
 		if err := validateLink(link, text); err != nil {
 			return nil, nil, err
 		}
-		if link.Icon == "" {
-			link.Icon = faviconURL(link.URL)
-		}
+		link = normalizeLinkIcon(ctx, link)
 		if link.SortOrder <= 0 {
 			link.SortOrder = index + 1
 		}
@@ -339,6 +353,15 @@ func prepareCardsBackup(categories []categoryBox, links []linkCard, text textFun
 		IsDefault: true,
 	})
 	return preparedCategories, preparedLinks, nil
+}
+
+func normalizeBackupLinkIcons(ctx context.Context, links []linkCard) []linkCard {
+	normalized := make([]linkCard, 0, len(links))
+	for _, link := range links {
+		link.Icon = strings.TrimSpace(link.Icon)
+		normalized = append(normalized, normalizeLinkIcon(ctx, link))
+	}
+	return normalized
 }
 
 func importSettingsBackup(ctx context.Context, db *sql.DB, settings appSettings, text textFunc) (appSettings, error) {

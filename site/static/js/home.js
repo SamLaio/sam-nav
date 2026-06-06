@@ -6,7 +6,22 @@
   const empty = document.getElementById("search-empty");
   const searchEnginePanel = document.getElementById("search-engine-panel");
   const searchEngineLinks = Array.from(document.querySelectorAll(".search-engine-link"));
+  const categoryStorageKey = "samNav.front.category";
   let selectedCategory = "";
+
+  const readStoredCategory = () => {
+    try {
+      return window.localStorage.getItem(categoryStorageKey) || "";
+    } catch (_) {
+      return "";
+    }
+  };
+
+  const writeStoredCategory = (category) => {
+    try {
+      window.localStorage.setItem(categoryStorageKey, category || "");
+    } catch (_) {}
+  };
 
   const normalizeText = (value) => String(value || "").trim().toLocaleLowerCase();
 
@@ -88,12 +103,24 @@
   categoryButtons.forEach((button) => {
     button.addEventListener("click", () => {
       selectedCategory = button.dataset.categoryFilter || "";
+      writeStoredCategory(selectedCategory);
       categoryButtons.forEach((item) => {
         item.classList.toggle("is-active", item === button);
       });
       applyFilters();
     });
   });
+
+  const storedCategory = readStoredCategory();
+  const storedCategoryButton = categoryButtons.find((button) => (button.dataset.categoryFilter || "") === storedCategory);
+  if (storedCategoryButton) {
+    selectedCategory = storedCategory;
+    categoryButtons.forEach((item) => {
+      item.classList.toggle("is-active", item === storedCategoryButton);
+    });
+  } else {
+    writeStoredCategory("");
+  }
 
   input.addEventListener("input", applyFilters);
 

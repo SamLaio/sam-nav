@@ -2,14 +2,18 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -71,7 +75,23 @@ type linkSortPayload struct {
 
 type textFunc func(string) string
 
-func registerLinkRoutes(router *gin.Engine, admin *gin.RouterGroup, db *sql.DB, text textFunc) {
+const iconValidationTimeout = 5 * time.Second
+const maxIconImageBytes = 2 * 1024 * 1024
+
+var linkIconHTTPClient = newLinkIconHTTPClient()
+
+func newLinkIconHTTPClient() *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	// 圖示常來自內網設備或自簽憑證服務，驗證時只確認能取得圖片內容。
+	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	return &http.Client{
+		Transport: transport,
+		Timeout:   iconValidationTimeout,
+	}
+}
+
+func registerLinkRoutes(router *gin.Engine, admin *gin.RouterGroup, db *sql.DB, text textFunc, iconCacheDirs ...string) {
+	iconCacheDir := firstIconCacheDir(iconCacheDirs...)
 	router.GET("/api/links", func(c *gin.Context) {
 		links, err := listVisibleLinks(c.Request.Context(), db)
 		if err != nil {
@@ -79,6 +99,20 @@ func registerLinkRoutes(router *gin.Engine, admin *gin.RouterGroup, db *sql.DB, 
 			return
 		}
 		jsonOK(c, text("api_links_loaded"), links)
+	})
+	router.GET("/api/links/:id/icon", func(c *gin.Context) {
+		id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+		if err != nil || id <= 0 {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		content, contentType, ok := loadCachedLinkIcon(c.Request.Context(), db, iconCacheDir, id)
+		if !ok {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		c.Header("Cache-Control", "no-cache")
+		c.Data(http.StatusOK, contentType, content)
 	})
 
 	admin.GET("/links", func(c *gin.Context) {
@@ -95,7 +129,7 @@ func registerLinkRoutes(router *gin.Engine, admin *gin.RouterGroup, db *sql.DB, 
 			jsonError(c, http.StatusBadRequest, err)
 			return
 		}
-		created, err := createLink(c.Request.Context(), db, card, text)
+		created, err := createLink(c.Request.Context(), db, card, text, iconCacheDir)
 		if err != nil {
 			jsonError(c, http.StatusBadRequest, err)
 			return
@@ -116,7 +150,7 @@ func registerLinkRoutes(router *gin.Engine, admin *gin.RouterGroup, db *sql.DB, 
 		}
 		card.ID = id
 
-		updated, err := updateLink(c.Request.Context(), db, card, text)
+		updated, err := updateLink(c.Request.Context(), db, card, text, iconCacheDir)
 		if err != nil {
 			jsonError(c, http.StatusBadRequest, err)
 			return
@@ -129,7 +163,7 @@ func registerLinkRoutes(router *gin.Engine, admin *gin.RouterGroup, db *sql.DB, 
 			jsonError(c, http.StatusBadRequest, err)
 			return
 		}
-		if err := deleteLink(c.Request.Context(), db, id, text); err != nil {
+		if err := deleteLink(c.Request.Context(), db, id, text, iconCacheDir); err != nil {
 			jsonError(c, http.StatusBadRequest, err)
 			return
 		}
@@ -146,6 +180,14 @@ func registerLinkRoutes(router *gin.Engine, admin *gin.RouterGroup, db *sql.DB, 
 			return
 		}
 		jsonOK(c, text("api_sort_updated"), nil)
+	})
+	admin.PUT("/links/icons", func(c *gin.Context) {
+		updatedCount, err := updateAllLinkIcons(c.Request.Context(), db, iconCacheDir)
+		if err != nil {
+			jsonError(c, http.StatusInternalServerError, err)
+			return
+		}
+		jsonOK(c, text("api_icons_updated"), gin.H{"updated": updatedCount})
 	})
 }
 
@@ -208,7 +250,17 @@ func queryLinks(ctx context.Context, db *sql.DB, where string) ([]linkCard, erro
 	return links, rows.Err()
 }
 
-func createLink(ctx context.Context, db *sql.DB, card linkCard, text textFunc) (linkCard, error) {
+func getLinkIcon(ctx context.Context, db *sql.DB, id int64) (string, error) {
+	var icon string
+	err := db.QueryRowContext(ctx, `SELECT icon FROM nav_links WHERE id = ?;`, id).Scan(&icon)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return strings.TrimSpace(icon), err
+}
+
+func createLink(ctx context.Context, db *sql.DB, card linkCard, text textFunc, iconCacheDirs ...string) (linkCard, error) {
+	iconCacheDir := firstIconCacheDir(iconCacheDirs...)
 	card = cleanLink(card)
 	if err := validateLink(card, text); err != nil {
 		return linkCard{}, err
@@ -216,9 +268,7 @@ func createLink(ctx context.Context, db *sql.DB, card linkCard, text textFunc) (
 	if err := ensureCategory(ctx, db, card.Category); err != nil {
 		return linkCard{}, err
 	}
-	if card.Icon == "" {
-		card.Icon = faviconURL(card.URL)
-	}
+	card = normalizeLinkIcon(ctx, card)
 	if card.SortOrder <= 0 {
 		nextSort, err := nextLinkSort(ctx, db)
 		if err != nil {
@@ -243,10 +293,15 @@ func createLink(ctx context.Context, db *sql.DB, card linkCard, text textFunc) (
 		return linkCard{}, err
 	}
 	card.ID, err = result.LastInsertId()
+	if err != nil {
+		return card, err
+	}
+	card = refreshStoredLinkIcon(ctx, db, iconCacheDir, card)
 	return card, err
 }
 
-func updateLink(ctx context.Context, db *sql.DB, card linkCard, text textFunc) (linkCard, error) {
+func updateLink(ctx context.Context, db *sql.DB, card linkCard, text textFunc, iconCacheDirs ...string) (linkCard, error) {
+	iconCacheDir := firstIconCacheDir(iconCacheDirs...)
 	card = cleanLink(card)
 	if card.ID <= 0 {
 		return linkCard{}, errors.New(text("error_invalid_link_id"))
@@ -257,6 +312,7 @@ func updateLink(ctx context.Context, db *sql.DB, card linkCard, text textFunc) (
 	if err := ensureCategory(ctx, db, card.Category); err != nil {
 		return linkCard{}, err
 	}
+	card = normalizeLinkIcon(ctx, card)
 	if card.SortOrder <= 0 {
 		nextSort, err := nextLinkSort(ctx, db)
 		if err != nil {
@@ -289,10 +345,12 @@ func updateLink(ctx context.Context, db *sql.DB, card linkCard, text textFunc) (
 	if affected == 0 {
 		return linkCard{}, errors.New(text("error_link_update_not_found"))
 	}
+	card = refreshStoredLinkIcon(ctx, db, iconCacheDir, card)
 	return card, nil
 }
 
-func deleteLink(ctx context.Context, db *sql.DB, id int64, text textFunc) error {
+func deleteLink(ctx context.Context, db *sql.DB, id int64, text textFunc, iconCacheDirs ...string) error {
+	iconCacheDir := firstIconCacheDir(iconCacheDirs...)
 	result, err := db.ExecContext(ctx, `DELETE FROM nav_links WHERE id = ?;`, id)
 	if err != nil {
 		return err
@@ -304,6 +362,7 @@ func deleteLink(ctx context.Context, db *sql.DB, id int64, text textFunc) error 
 	if affected == 0 {
 		return errors.New(text("error_link_delete_not_found"))
 	}
+	removeCachedLinkIcon(iconCacheDir, id)
 	return nil
 }
 
@@ -334,6 +393,52 @@ func updateLinksSort(ctx context.Context, db *sql.DB, updates []linkSortUpdate, 
 	return tx.Commit()
 }
 
+func updateAllLinkIcons(ctx context.Context, db *sql.DB, iconCacheDirs ...string) (int, error) {
+	iconCacheDir := firstIconCacheDir(iconCacheDirs...)
+	links, err := listAdminLinks(ctx, db)
+	if err != nil {
+		return 0, err
+	}
+
+	type iconUpdate struct {
+		id   int64
+		icon string
+	}
+	updates := make([]iconUpdate, 0)
+	for _, link := range links {
+		normalized := normalizeLinkIcon(ctx, link)
+		normalized = refreshLinkIconCache(ctx, iconCacheDir, normalized, true)
+		if normalized.Icon != link.Icon {
+			updates = append(updates, iconUpdate{id: link.ID, icon: normalized.Icon})
+		}
+	}
+	if len(updates) == 0 {
+		return 0, nil
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.PrepareContext(ctx, `UPDATE nav_links SET icon = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;`)
+	if err != nil {
+		return 0, err
+	}
+	defer stmt.Close()
+
+	for _, update := range updates {
+		if _, err := stmt.ExecContext(ctx, update.icon, update.id); err != nil {
+			return 0, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return len(updates), nil
+}
+
 func nextLinkSort(ctx context.Context, db *sql.DB) (int, error) {
 	var next int
 	err := db.QueryRowContext(ctx, `SELECT COALESCE(MAX(sort_order), 0) + 1 FROM nav_links;`).Scan(&next)
@@ -351,6 +456,17 @@ func cleanLink(card linkCard) linkCard {
 	card.Icon = strings.TrimSpace(card.Icon)
 	if shouldReplaceIcon(card.Icon) {
 		card.Icon = faviconURL(card.URL)
+	}
+	return card
+}
+
+func fillMissingLinkIcon(ctx context.Context, card linkCard) linkCard {
+	if card.Icon != "" {
+		return card
+	}
+	icon := faviconURL(card.URL)
+	if icon != "" && linkIconURLHasImage(ctx, icon) {
+		card.Icon = icon
 	}
 	return card
 }
@@ -395,6 +511,243 @@ func validateLink(card linkCard, text textFunc) error {
 		return errors.New(text("error_url_required"))
 	}
 	return nil
+}
+
+func normalizeLinkIcon(ctx context.Context, card linkCard) linkCard {
+	if card.Icon != "" && isGeneratedFavicon(card.Icon) {
+		card.Icon = ""
+	}
+	if card.Icon != "" && !linkIconURLHasImage(ctx, card.Icon) {
+		card.Icon = ""
+	}
+	return fillMissingLinkIcon(ctx, card)
+}
+
+func isGeneratedFavicon(icon string) bool {
+	return strings.HasPrefix(strings.TrimSpace(icon), "https://www.google.com/s2/favicons?")
+}
+
+func linkIconURLHasImage(ctx context.Context, icon string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(icon))
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return false
+	}
+	if linkIconRequestHasImage(ctx, http.MethodHead, icon) {
+		return true
+	}
+	return linkIconRequestHasImage(ctx, http.MethodGet, icon)
+}
+
+func linkIconRequestHasImage(ctx context.Context, method, icon string) bool {
+	requestCtx, cancel := context.WithTimeout(ctx, iconValidationTimeout)
+	defer cancel()
+
+	request, err := http.NewRequestWithContext(requestCtx, method, icon, nil)
+	if err != nil {
+		return false
+	}
+	request.Header.Set("User-Agent", "SamNav/1.0")
+
+	response, err := linkIconHTTPClient.Do(request)
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return false
+	}
+	contentType := strings.ToLower(strings.TrimSpace(response.Header.Get("Content-Type")))
+	if strings.HasPrefix(contentType, "image/") {
+		return true
+	}
+	if method != http.MethodGet {
+		return false
+	}
+
+	buffer := make([]byte, 512)
+	read, _ := io.ReadFull(response.Body, buffer)
+	if read <= 0 {
+		return false
+	}
+	detectedType := strings.ToLower(http.DetectContentType(buffer[:read]))
+	return strings.HasPrefix(detectedType, "image/")
+}
+
+func fetchLinkIconImage(ctx context.Context, icon string) ([]byte, string, bool) {
+	parsed, err := url.Parse(strings.TrimSpace(icon))
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return nil, "", false
+	}
+	requestCtx, cancel := context.WithTimeout(ctx, iconValidationTimeout)
+	defer cancel()
+
+	request, err := http.NewRequestWithContext(requestCtx, http.MethodGet, icon, nil)
+	if err != nil {
+		return nil, "", false
+	}
+	request.Header.Set("User-Agent", "SamNav/1.0")
+
+	response, err := linkIconHTTPClient.Do(request)
+	if err != nil {
+		return nil, "", false
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return nil, "", false
+	}
+	content, err := io.ReadAll(io.LimitReader(response.Body, maxIconImageBytes+1))
+	if err != nil || len(content) == 0 || len(content) > maxIconImageBytes {
+		return nil, "", false
+	}
+	contentType := strings.ToLower(strings.TrimSpace(response.Header.Get("Content-Type")))
+	if strings.HasPrefix(contentType, "image/") {
+		return content, contentType, true
+	}
+	detectedType := detectIconContentType(content)
+	if !strings.HasPrefix(detectedType, "image/") {
+		return nil, "", false
+	}
+	return content, detectedType, true
+}
+
+func loadCachedLinkIcon(ctx context.Context, db *sql.DB, iconCacheDir string, id int64) ([]byte, string, bool) {
+	if iconCacheDir == "" {
+		return nil, "", false
+	}
+	content, contentType, ok := readCachedLinkIcon(iconCacheDir, id)
+	if ok {
+		return content, contentType, true
+	}
+	icon, err := getLinkIcon(ctx, db, id)
+	if err != nil || icon == "" {
+		return nil, "", false
+	}
+	card := linkCard{ID: id, Icon: icon}
+	card = refreshLinkIconCache(ctx, iconCacheDir, card, false)
+	if card.Icon == "" {
+		return nil, "", false
+	}
+	return readCachedLinkIcon(iconCacheDir, id)
+}
+
+func refreshStoredLinkIcon(ctx context.Context, db *sql.DB, iconCacheDir string, card linkCard) linkCard {
+	card = refreshLinkIconCache(ctx, iconCacheDir, card, true)
+	if card.Icon == "" {
+		_, _ = db.ExecContext(ctx, `UPDATE nav_links SET icon = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;`, "", card.ID)
+	}
+	return card
+}
+
+func refreshLinkIconCache(ctx context.Context, iconCacheDir string, card linkCard, force bool) linkCard {
+	if iconCacheDir == "" {
+		return card
+	}
+	if card.ID <= 0 {
+		return card
+	}
+	if strings.TrimSpace(card.Icon) == "" {
+		card.Icon = ""
+		removeCachedLinkIcon(iconCacheDir, card.ID)
+		return card
+	}
+	if !force {
+		if _, _, ok := readCachedLinkIcon(iconCacheDir, card.ID); ok {
+			return card
+		}
+	}
+	content, _, ok := fetchLinkIconImage(ctx, card.Icon)
+	if !ok {
+		card.Icon = ""
+		removeCachedLinkIcon(iconCacheDir, card.ID)
+		return card
+	}
+	if err := writeCachedLinkIcon(iconCacheDir, card.ID, content); err != nil {
+		card.Icon = ""
+		removeCachedLinkIcon(iconCacheDir, card.ID)
+	}
+	return card
+}
+
+func readCachedLinkIcon(iconCacheDir string, id int64) ([]byte, string, bool) {
+	if iconCacheDir == "" || id <= 0 {
+		return nil, "", false
+	}
+	content, err := os.ReadFile(cachedLinkIconPath(iconCacheDir, id))
+	if err != nil || len(content) == 0 {
+		return nil, "", false
+	}
+	contentType := detectIconContentType(content)
+	if !strings.HasPrefix(contentType, "image/") {
+		return nil, "", false
+	}
+	return content, contentType, true
+}
+
+func writeCachedLinkIcon(iconCacheDir string, id int64, content []byte) error {
+	if iconCacheDir == "" || id <= 0 {
+		return errors.New("圖示快取路徑無效")
+	}
+	if err := os.MkdirAll(iconCacheDir, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(cachedLinkIconPath(iconCacheDir, id), content, 0o644)
+}
+
+func removeCachedLinkIcon(iconCacheDir string, id int64) {
+	if iconCacheDir == "" || id <= 0 {
+		return
+	}
+	_ = os.Remove(cachedLinkIconPath(iconCacheDir, id))
+}
+
+func clearLinkIconCache(iconCacheDir string) {
+	if iconCacheDir == "" {
+		return
+	}
+	entries, err := os.ReadDir(iconCacheDir)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasPrefix(entry.Name(), "link-") {
+			continue
+		}
+		_ = os.Remove(filepath.Join(iconCacheDir, entry.Name()))
+	}
+}
+
+func cachedLinkIconPath(iconCacheDir string, id int64) string {
+	return filepath.Join(iconCacheDir, "link-"+strconv.FormatInt(id, 10)+".img")
+}
+
+func detectIconContentType(content []byte) string {
+	prefixLength := len(content)
+	if prefixLength > 512 {
+		prefixLength = 512
+	}
+	prefix := strings.ToLower(strings.TrimSpace(string(content[:prefixLength])))
+	if strings.Contains(prefix, "<svg") {
+		return "image/svg+xml"
+	}
+	return strings.ToLower(http.DetectContentType(content))
+}
+
+func firstIconCacheDir(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func linkIconPath(card linkCard) string {
+	if card.ID <= 0 || strings.TrimSpace(card.Icon) == "" {
+		return ""
+	}
+	return "/api/links/" + strconv.FormatInt(card.ID, 10) + "/icon"
 }
 
 func parseID(raw string, text textFunc) (int64, error) {

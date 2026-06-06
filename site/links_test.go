@@ -1,6 +1,14 @@
 package main
 
-import "testing"
+import (
+	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"testing"
+)
 
 func TestFaviconURL(t *testing.T) {
 	tests := map[string]string{
@@ -27,4 +35,112 @@ func TestCleanLinkReplacesClearbitIcon(t *testing.T) {
 	if card.Icon != "https://www.google.com/s2/favicons?domain=www.kobo.com&sz=64" {
 		t.Fatalf("Clearbit 圖示應改成 Google favicon，取得：%s", card.Icon)
 	}
+}
+
+func TestNormalizeLinkIconKeepsValidImageAndFallsBack(t *testing.T) {
+	withTestGoogleFaviconClient(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pngHeader := []byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a}
+		switch r.URL.Path {
+		case "/image.png":
+			w.Header().Set("Content-Type", "image/png")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(pngHeader)
+		case "/get-only.png":
+			if r.Method == http.MethodHead {
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(pngHeader)
+		default:
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("<html></html>"))
+		}
+	}))
+	defer server.Close()
+
+	tests := []struct {
+		name     string
+		url      string
+		icon     string
+		expected string
+	}{
+		{name: "空白補預設 favicon", url: "https://example.com/docs", icon: "", expected: "https://www.google.com/s2/favicons?domain=example.com&sz=64"},
+		{name: "圖片網址保留", url: "https://example.com/docs", icon: server.URL + "/image.png", expected: server.URL + "/image.png"},
+		{name: "HEAD 失敗時改用 GET", url: "https://example.com/docs", icon: server.URL + "/get-only.png", expected: server.URL + "/get-only.png"},
+		{name: "非圖片網址改補 favicon", url: "https://page.example.com", icon: server.URL + "/page.html", expected: "https://www.google.com/s2/favicons?domain=page.example.com&sz=64"},
+		{name: "非 HTTP 網址改補 favicon", url: "https://mail.example.com", icon: "mailto:admin@example.com", expected: "https://www.google.com/s2/favicons?domain=mail.example.com&sz=64"},
+		{name: "系統 favicon 依目前網址重算", url: "https://new.example.com", icon: "https://www.google.com/s2/favicons?domain=old.example.com&sz=64", expected: "https://www.google.com/s2/favicons?domain=new.example.com&sz=64"},
+		{name: "自動 favicon 抓不到時留空", url: "https://no-icon.example.com", icon: "", expected: ""},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			card := normalizeLinkIcon(context.Background(), linkCard{
+				URL:  test.url,
+				Icon: test.icon,
+			})
+			if card.Icon != test.expected {
+				t.Fatalf("Icon = %q，預期 %q", card.Icon, test.expected)
+			}
+		})
+	}
+}
+
+func TestLinkIconURLHasImageAllowsSelfSignedHTTPS(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a})
+	}))
+	defer server.Close()
+
+	if !linkIconURLHasImage(context.Background(), server.URL+"/icon.png") {
+		t.Fatal("自簽 HTTPS 圖示應視為有效圖片")
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return fn(request)
+}
+
+func withTestGoogleFaviconClient(t *testing.T) {
+	t.Helper()
+	previousClient := linkIconHTTPClient
+	baseTransport := http.DefaultTransport
+	linkIconHTTPClient = &http.Client{
+		Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			if request.URL.Host != "www.google.com" {
+				return baseTransport.RoundTrip(request)
+			}
+			domain := request.URL.Query().Get("domain")
+			contentType := "image/png"
+			content := string([]byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a})
+			if domain == "no-icon.example.com" {
+				contentType = "text/html"
+				content = "<html></html>"
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header: http.Header{
+					"Content-Type": []string{contentType},
+				},
+				Body:    io.NopCloser(strings.NewReader(content)),
+				Request: request,
+			}, nil
+		}),
+		Timeout: iconValidationTimeout,
+	}
+	t.Cleanup(func() {
+		linkIconHTTPClient = previousClient
+	})
+}
+
+func testGeneratedFaviconURL(rawURL string) string {
+	parsed, _ := url.Parse(rawURL)
+	return "https://www.google.com/s2/favicons?domain=" + url.QueryEscape(parsed.Hostname()) + "&sz=64"
 }

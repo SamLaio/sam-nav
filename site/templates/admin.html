@@ -87,6 +87,8 @@
               data-message-import-completed="{{ t "message_import_completed" }}"
               data-message-export-processing="{{ t "message_export_processing" }}"
               data-message-import-processing="{{ t "message_import_processing" }}"
+              data-message-icons-updated="{{ t "message_icons_updated" }}"
+              data-message-icons-updating="{{ t "message_icons_updating" }}"
               data-sort-log="{{ t "sort_order_changed" }}"
               data-confirm-delete-prefix="{{ t "confirm_delete_prefix" }}"
               data-confirm-delete-suffix="{{ t "confirm_delete_suffix" }}"
@@ -103,7 +105,11 @@
                 <li data-id="{{ .ID }}">
                   <span class="drag-handle">::</span>
                   <span class="admin-link-main">
-                    <span class="admin-link-title">{{ .Title }}</span>
+                    <span class="admin-link-heading">
+                      {{ $iconPath := linkIconPath . }}
+                      <span class="admin-link-icon{{ if not $iconPath }} is-letter-icon{{ end }}" aria-hidden="true" data-fallback-letter="{{ firstRune .Title }}">{{ if $iconPath }}<img src="{{ $iconPath }}" alt="">{{ else }}{{ firstRune .Title }}{{ end }}</span>
+                      <span class="admin-link-title">{{ .Title }}</span>
+                    </span>
                     <span class="admin-link-url">{{ .URL }}</span>
                   </span>
                   <label class="admin-hidden-toggle">
@@ -169,6 +175,19 @@
               </div>
             </form>
             <p id="settings-message" class="admin-message" role="status" aria-live="polite"></p>
+          </section>
+
+          <section class="panel">
+            <div class="panel-title">{{ t "icons_update_title" }}</div>
+            <div class="import-export-item">
+              <div class="import-export-copy">
+                <strong>{{ t "icons_update_action_title" }}</strong>
+                <span>{{ t "icons_update_description" }}</span>
+              </div>
+              <div class="import-export-actions">
+                <button type="button" class="secondary-button" data-action="update-icons">{{ t "button_update_icons" }}</button>
+              </div>
+            </div>
           </section>
 
           <section class="panel">

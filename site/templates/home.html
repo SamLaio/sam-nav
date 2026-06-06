@@ -32,7 +32,8 @@
       <section id="home-links" class="link-grid">
         {{ range .Links }}
           <a class="link-card" href="{{ .URL }}" {{ if $.OpenNewTab }}target="_blank" rel="noopener noreferrer"{{ end }} data-category="{{ .Category }}" data-search="{{ .Title }} {{ .Category }} {{ .Description }} {{ .URL }}">
-            <span class="link-icon" aria-hidden="true" data-fallback-letter="{{ firstRune .Title }}">{{ if .Icon }}<img src="{{ .Icon }}" alt="">{{ else }}{{ firstRune .Title }}{{ end }}</span>
+            {{ $iconPath := linkIconPath . }}
+            <span class="link-icon" aria-hidden="true" data-fallback-letter="{{ firstRune .Title }}">{{ if $iconPath }}<img src="{{ $iconPath }}" alt="">{{ else }}{{ firstRune .Title }}{{ end }}</span>
             <span class="link-content">
               <span class="link-title-row">
                 <span class="link-title">{{ .Title }}</span>
@@ -67,6 +68,7 @@
     class="theme-float-button"
     type="button"
     data-theme="{{ .DefaultTheme }}"
+    data-remember-theme="true"
     data-light-label="{{ t "theme_light" }}"
     data-dark-label="{{ t "theme_dark" }}"
     title="{{ t "button_toggle_theme" }}"

@@ -56,7 +56,7 @@ func main() {
 
 	languageProvider := newLanguageProvider(env("SAM_NAV_LANG", defaultLanguageName))
 	text := languageProvider.text
-	appVersion := env("SAM_NAV_VERSION", "v0.2.2")
+	appVersion := env("SAM_NAV_VERSION", "v0.3")
 	appBuildHash := buildHash()
 
 	dataDir := env("SAM_NAV_DATA_DIR", "./data")
@@ -64,6 +64,10 @@ func main() {
 		log.Fatalf(text("log_create_data_dir"), err)
 	}
 	dbPath := env("SAM_NAV_DB_PATH", filepath.Join(dataDir, "nav.sqlite"))
+	iconCacheDir := filepath.Join(filepath.Dir(dbPath), "icon-cache")
+	if err := os.MkdirAll(iconCacheDir, 0o755); err != nil {
+		log.Fatalf("建立圖示快取目錄失敗：%v", err)
+	}
 	db, err := openDatabase(dbPath)
 	if err != nil {
 		log.Fatalf(text("log_open_database"), err)
@@ -75,8 +79,9 @@ func main() {
 	router := gin.Default()
 
 	tmpl := template.Must(template.New("").Funcs(template.FuncMap{
-		"t":         text,
-		"firstRune": firstRune,
+		"t":            text,
+		"firstRune":    firstRune,
+		"linkIconPath": linkIconPath,
 	}).ParseFS(siteFS, "templates/*.html"))
 	router.SetHTMLTemplate(tmpl)
 	staticFS := mustSub(siteFS, "static")
@@ -179,11 +184,11 @@ func main() {
 	router.GET("/admin", renderAdmin)
 	router.GET("/admin/links", renderAdmin)
 	adminAPI := router.Group("/api/admin", auth.requireAPI())
-	registerLinkRoutes(router, adminAPI, db, text)
+	registerLinkRoutes(router, adminAPI, db, text, iconCacheDir)
 	registerCategoryRoutes(adminAPI, db, text)
 	registerSearchEngineRoutes(adminAPI, db, text)
 	registerSettingsRoutes(router, adminAPI, db, text, languageProvider.useLanguage)
-	registerBackupRoutes(adminAPI, db, text, languageProvider.useLanguage)
+	registerBackupRoutes(adminAPI, db, text, languageProvider.useLanguage, iconCacheDir)
 
 	port := env("SAM_NAV_PORT", "80")
 	log.Printf(text("log_starting"), port, dataDir, dbPath)
