@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"database/sql"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/net/html"
 )
 
 type linkCard struct {
@@ -77,6 +79,7 @@ type textFunc func(string) string
 
 const iconValidationTimeout = 5 * time.Second
 const maxIconImageBytes = 2 * 1024 * 1024
+const maxIconDiscoveryHTMLBytes = 1 * 1024 * 1024
 
 var linkIconHTTPClient = newLinkIconHTTPClient()
 
@@ -464,6 +467,10 @@ func fillMissingLinkIcon(ctx context.Context, card linkCard) linkCard {
 	if card.Icon != "" {
 		return card
 	}
+	if icon := discoverLinkIcon(ctx, card.URL); icon != "" {
+		card.Icon = icon
+		return card
+	}
 	icon := faviconURL(card.URL)
 	if icon != "" && linkIconURLHasImage(ctx, icon) {
 		card.Icon = icon
@@ -525,6 +532,198 @@ func normalizeLinkIcon(ctx context.Context, card linkCard) linkCard {
 
 func isGeneratedFavicon(icon string) bool {
 	return strings.HasPrefix(strings.TrimSpace(icon), "https://www.google.com/s2/favicons?")
+}
+
+func discoverLinkIcon(ctx context.Context, rawURL string) string {
+	pageURL, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || pageURL.Scheme == "" || pageURL.Host == "" || (pageURL.Scheme != "http" && pageURL.Scheme != "https") {
+		return ""
+	}
+	content, ok := fetchLinkIconDiscoveryHTML(ctx, pageURL.String())
+	if !ok {
+		return ""
+	}
+	for _, candidate := range linkIconCandidatesFromHTML(content, pageURL) {
+		if linkIconURLHasImage(ctx, candidate) {
+			return candidate
+		}
+	}
+	return ""
+}
+
+func fetchLinkIconDiscoveryHTML(ctx context.Context, pageURL string) ([]byte, bool) {
+	requestCtx, cancel := context.WithTimeout(ctx, iconValidationTimeout)
+	defer cancel()
+
+	request, err := http.NewRequestWithContext(requestCtx, http.MethodGet, pageURL, nil)
+	if err != nil {
+		return nil, false
+	}
+	request.Header.Set("User-Agent", "SamNav/1.0")
+
+	response, err := linkIconHTTPClient.Do(request)
+	if err != nil {
+		return nil, false
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return nil, false
+	}
+	content, err := io.ReadAll(io.LimitReader(response.Body, maxIconDiscoveryHTMLBytes+1))
+	if err != nil || len(content) == 0 || len(content) > maxIconDiscoveryHTMLBytes {
+		return nil, false
+	}
+	contentType := strings.ToLower(strings.TrimSpace(response.Header.Get("Content-Type")))
+	if contentType != "" && !strings.Contains(contentType, "text/html") && !strings.Contains(contentType, "application/xhtml+xml") {
+		detectedType := strings.ToLower(http.DetectContentType(content))
+		if !strings.Contains(detectedType, "text/html") {
+			return nil, false
+		}
+	}
+	return content, true
+}
+
+type linkIconCandidate struct {
+	url      string
+	priority int
+	order    int
+}
+
+func linkIconCandidatesFromHTML(content []byte, pageURL *url.URL) []string {
+	document, err := html.Parse(bytes.NewReader(content))
+	if err != nil {
+		return nil
+	}
+	baseURL := *pageURL
+	if baseHref := firstHTMLAttr(document, "base", "href"); baseHref != "" {
+		if resolved := resolveLinkIconURL(pageURL, baseHref); resolved != "" {
+			if parsed, err := url.Parse(resolved); err == nil {
+				baseURL = *parsed
+			}
+		}
+	}
+
+	candidates := make([]linkIconCandidate, 0)
+	seen := map[string]bool{}
+	order := 0
+	var walk func(*html.Node)
+	walk = func(node *html.Node) {
+		if node == nil {
+			return
+		}
+		if node.Type == html.ElementNode {
+			switch strings.ToLower(node.Data) {
+			case "link":
+				rel := htmlAttr(node, "rel")
+				href := htmlAttr(node, "href")
+				if priority, ok := linkIconRelPriority(rel); ok {
+					addLinkIconCandidate(&candidates, seen, &order, &baseURL, href, priority)
+				}
+			case "meta":
+				name := strings.ToLower(firstNonEmpty(htmlAttr(node, "property"), htmlAttr(node, "name")))
+				if name == "og:image" || name == "twitter:image" {
+					addLinkIconCandidate(&candidates, seen, &order, &baseURL, htmlAttr(node, "content"), 40)
+				}
+			}
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			walk(child)
+		}
+	}
+	walk(document)
+
+	for i := 0; i < len(candidates)-1; i++ {
+		for j := i + 1; j < len(candidates); j++ {
+			if candidates[j].priority < candidates[i].priority || (candidates[j].priority == candidates[i].priority && candidates[j].order < candidates[i].order) {
+				candidates[i], candidates[j] = candidates[j], candidates[i]
+			}
+		}
+	}
+	urls := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		urls = append(urls, candidate.url)
+	}
+	return urls
+}
+
+func addLinkIconCandidate(candidates *[]linkIconCandidate, seen map[string]bool, order *int, baseURL *url.URL, rawURL string, priority int) {
+	resolved := resolveLinkIconURL(baseURL, rawURL)
+	if resolved == "" || seen[resolved] {
+		return
+	}
+	seen[resolved] = true
+	*candidates = append(*candidates, linkIconCandidate{url: resolved, priority: priority, order: *order})
+	*order += 1
+}
+
+func linkIconRelPriority(rel string) (int, bool) {
+	tokens := strings.Fields(strings.ToLower(rel))
+	hasIcon := false
+	hasAppleTouchIcon := false
+	hasMaskIcon := false
+	for _, token := range tokens {
+		switch token {
+		case "icon":
+			hasIcon = true
+		case "apple-touch-icon", "apple-touch-icon-precomposed":
+			hasAppleTouchIcon = true
+		case "mask-icon":
+			hasMaskIcon = true
+		}
+	}
+	if hasIcon {
+		return 10, true
+	}
+	if hasAppleTouchIcon {
+		return 20, true
+	}
+	if hasMaskIcon {
+		return 30, true
+	}
+	return 0, false
+}
+
+func firstHTMLAttr(root *html.Node, tagName, attrName string) string {
+	if root == nil {
+		return ""
+	}
+	if root.Type == html.ElementNode && strings.EqualFold(root.Data, tagName) {
+		if value := htmlAttr(root, attrName); value != "" {
+			return value
+		}
+	}
+	for child := root.FirstChild; child != nil; child = child.NextSibling {
+		if value := firstHTMLAttr(child, tagName, attrName); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func htmlAttr(node *html.Node, name string) string {
+	for _, attr := range node.Attr {
+		if strings.EqualFold(attr.Key, name) {
+			return strings.TrimSpace(attr.Val)
+		}
+	}
+	return ""
+}
+
+func resolveLinkIconURL(baseURL *url.URL, rawURL string) string {
+	rawURL = strings.TrimSpace(rawURL)
+	if rawURL == "" {
+		return ""
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	resolved := baseURL.ResolveReference(parsed)
+	if resolved.Scheme != "http" && resolved.Scheme != "https" {
+		return ""
+	}
+	return resolved.String()
 }
 
 func linkIconURLHasImage(ctx context.Context, icon string) bool {

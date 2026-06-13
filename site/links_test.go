@@ -46,6 +46,14 @@ func TestNormalizeLinkIconKeepsValidImageAndFallsBack(t *testing.T) {
 			w.Header().Set("Content-Type", "image/png")
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write(pngHeader)
+		case "/page-with-icon":
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`<html><head><link rel="icon" href="/image.png"></head></html>`))
+		case "/page-with-base":
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`<html><head><base href="/assets/"><link rel="apple-touch-icon" href="../image.png"></head></html>`))
 		case "/get-only.png":
 			if r.Method == http.MethodHead {
 				w.WriteHeader(http.StatusMethodNotAllowed)
@@ -67,12 +75,14 @@ func TestNormalizeLinkIconKeepsValidImageAndFallsBack(t *testing.T) {
 		icon     string
 		expected string
 	}{
-		{name: "空白補預設 favicon", url: "https://example.com/docs", icon: "", expected: "https://www.google.com/s2/favicons?domain=example.com&sz=64"},
+		{name: "空白先讀頁面 icon", url: server.URL + "/page-with-icon", icon: "", expected: server.URL + "/image.png"},
+		{name: "空白支援 base 與 apple touch icon", url: server.URL + "/page-with-base", icon: "", expected: server.URL + "/image.png"},
+		{name: "找不到頁面 icon 時補預設 favicon", url: server.URL + "/empty-page", icon: "", expected: testGeneratedFaviconURL(server.URL + "/empty-page")},
 		{name: "圖片網址保留", url: "https://example.com/docs", icon: server.URL + "/image.png", expected: server.URL + "/image.png"},
 		{name: "HEAD 失敗時改用 GET", url: "https://example.com/docs", icon: server.URL + "/get-only.png", expected: server.URL + "/get-only.png"},
-		{name: "非圖片網址改補 favicon", url: "https://page.example.com", icon: server.URL + "/page.html", expected: "https://www.google.com/s2/favicons?domain=page.example.com&sz=64"},
-		{name: "非 HTTP 網址改補 favicon", url: "https://mail.example.com", icon: "mailto:admin@example.com", expected: "https://www.google.com/s2/favicons?domain=mail.example.com&sz=64"},
-		{name: "系統 favicon 依目前網址重算", url: "https://new.example.com", icon: "https://www.google.com/s2/favicons?domain=old.example.com&sz=64", expected: "https://www.google.com/s2/favicons?domain=new.example.com&sz=64"},
+		{name: "非圖片網址改讀頁面 icon", url: server.URL + "/page-with-icon", icon: server.URL + "/page.html", expected: server.URL + "/image.png"},
+		{name: "非 HTTP 網址改補 favicon", url: server.URL + "/empty-page", icon: "mailto:admin@example.com", expected: testGeneratedFaviconURL(server.URL + "/empty-page")},
+		{name: "系統 favicon 依目前網址重算", url: server.URL + "/empty-page", icon: "https://www.google.com/s2/favicons?domain=old.example.com&sz=64", expected: testGeneratedFaviconURL(server.URL + "/empty-page")},
 		{name: "自動 favicon 抓不到時留空", url: "https://no-icon.example.com", icon: "", expected: ""},
 	}
 
@@ -114,6 +124,16 @@ func withTestGoogleFaviconClient(t *testing.T) {
 	baseTransport := http.DefaultTransport
 	linkIconHTTPClient = &http.Client{
 		Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			if request.URL.Host == "no-icon.example.com" {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header: http.Header{
+						"Content-Type": []string{"text/html"},
+					},
+					Body:    io.NopCloser(strings.NewReader("<html></html>")),
+					Request: request,
+				}, nil
+			}
 			if request.URL.Host != "www.google.com" {
 				return baseTransport.RoundTrip(request)
 			}

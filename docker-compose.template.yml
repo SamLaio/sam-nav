@@ -17,7 +17,7 @@ services:
       SAM_NAV_BASE_URL: http://127.0.0.1:8085
       # 若部署環境需要覆蓋其他預設值，可取消註解下方設定並調整。
       # SAM_NAV_SITE_TITLE: Sam Nav
-      # SAM_NAV_VERSION: v0.2.2
+      # SAM_NAV_VERSION: v0.4
       # SAM_NAV_BUILD_HASH: ""
       # SAM_NAV_DEFAULT_THEME: light
       # SAM_NAV_OPEN_IN_NEW_TAB: "1"

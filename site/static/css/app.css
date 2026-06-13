@@ -768,6 +768,12 @@ button {
   align-items: start;
 }
 
+.admin-content,
+.admin-aside,
+.panel {
+  min-width: 0;
+}
+
 .admin-layout.is-aside-hidden {
   grid-template-columns: 180px minmax(0, 1fr);
 }
@@ -793,7 +799,9 @@ button {
   border-color: var(--border);
   background: var(--panel);
   color: var(--text);
+  line-height: 1.3;
   text-align: left;
+  white-space: normal;
 }
 
 .admin-nav-button.is-active {
@@ -928,6 +936,32 @@ button {
   line-height: 1.6;
 }
 
+@media (max-width: 960px) {
+  .admin-layout,
+  .admin-layout.is-aside-hidden {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-layout.is-aside-hidden .admin-aside {
+    display: none;
+  }
+
+  .admin-sidebar,
+  .admin-aside {
+    position: static;
+  }
+
+  .admin-sidebar {
+    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  }
+
+  .admin-nav-button {
+    justify-content: center;
+    padding: 0 10px;
+    text-align: center;
+  }
+}
+
 @media (max-width: 720px) {
   html,
   body {
@@ -1015,6 +1049,27 @@ button {
     flex-wrap: wrap;
   }
 
+  .sortable-list li .drag-handle {
+    padding-top: 2px;
+  }
+
+  .sortable-list li .admin-link-main {
+    flex-basis: calc(100% - 34px);
+  }
+
+  .sortable-list li .admin-hidden-toggle {
+    flex: 1 0 100%;
+  }
+
+  .sortable-list li .text-button {
+    flex: 1 1 88px;
+    min-height: 36px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    text-align: center;
+  }
+
   .panel-heading {
     align-items: flex-start;
     flex-direction: column;
@@ -1039,22 +1094,11 @@ button {
     justify-content: flex-start;
   }
 
-  .admin-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .admin-sidebar,
-  .admin-aside {
-    position: static;
-  }
-
   .admin-sidebar {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
   }
 
   .admin-nav-button {
-    justify-content: center;
-    padding: 0 8px;
-    text-align: center;
+    min-height: 40px;
   }
 }
