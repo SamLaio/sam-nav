@@ -56,7 +56,7 @@ func main() {
 
 	languageProvider := newLanguageProvider(env("SAM_NAV_LANG", defaultLanguageName))
 	text := languageProvider.text
-	appVersion := env("SAM_NAV_VERSION", "v0.4")
+	appVersion := env("SAM_NAV_VERSION", "v0.5")
 	appBuildHash := buildHash()
 
 	dataDir := env("SAM_NAV_DATA_DIR", "./data")
