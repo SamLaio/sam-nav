@@ -64,6 +64,35 @@
     {{ end }}
   </main>
   <button
+    id="ambient-player-toggle"
+    class="music-float-button"
+    type="button"
+    title="{{ t "button_ambient_player" }}"
+    aria-label="{{ t "button_ambient_player" }}"
+  >
+    <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+      <path d="M9 18V5l11-2v13" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+      <circle cx="6" cy="18" r="3" fill="none" stroke="currentColor" stroke-width="2"></circle>
+      <circle cx="17" cy="16" r="3" fill="none" stroke="currentColor" stroke-width="2"></circle>
+    </svg>
+  </button>
+  <dialog id="ambient-player-dialog" class="ambient-player-dialog" aria-labelledby="ambient-player-title">
+    <div class="ambient-player-heading">
+      <div id="ambient-player-title" class="panel-title">{{ t "ambient_player_title" }}</div>
+      <button id="ambient-player-close" class="modal-close-button" type="button" aria-label="{{ t "button_close_dialog" }}">x</button>
+    </div>
+    <div class="ambient-player-controls">
+      <button id="ambient-play-toggle" class="ambient-play-button" type="button" aria-label="{{ t "ambient_play_toggle" }}">
+        <span class="ambient-play-icon" aria-hidden="true"></span>
+      </button>
+      <label class="ambient-volume-field">
+        <span>{{ t "ambient_master_volume" }}</span>
+        <input id="ambient-master-volume" type="range" min="0" max="1" step="0.01" value="0.8">
+      </label>
+    </div>
+    <div id="ambient-sound-list" class="ambient-sound-list"></div>
+  </dialog>
+  <button
     id="theme-toggle"
     class="theme-float-button"
     type="button"
@@ -76,5 +105,6 @@
   ></button>
   <script src="/static/js/theme.js?v={{ .BuildHash }}"></script>
   <script src="/static/js/home.js?v={{ .BuildHash }}"></script>
+  <script src="/static/js/background-player.js?v={{ .BuildHash }}"></script>
 </body>
 </html>

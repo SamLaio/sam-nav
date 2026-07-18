@@ -17,7 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-//go:embed templates/* static/css/* static/js/* static/vendor/* lang/*.json deffault.env
+//go:embed templates/* static/css/* static/js/* static/vendor/* static/sounds/ambient/* lang/*.json deffault.env
 var siteFS embed.FS
 
 type pageData struct {

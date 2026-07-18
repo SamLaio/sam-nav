@@ -575,6 +575,34 @@ button {
   color: var(--text);
 }
 
+.music-float-button {
+  position: fixed;
+  left: 18px;
+  bottom: 70px;
+  z-index: 20;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  min-height: 42px;
+  padding: 0;
+  place-items: center;
+  border-color: var(--border);
+  border-radius: 50%;
+  background: var(--panel);
+  box-shadow: 0 8px 22px rgb(0 0 0 / 16%);
+  color: var(--text);
+}
+
+.music-float-button svg {
+  width: 22px;
+  height: 22px;
+}
+
+.music-float-button.is-playing {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .theme-float-button::before {
   width: 18px;
   height: 18px;
@@ -599,6 +627,126 @@ button {
     -6px -6px 0 -5px var(--text),
     6px -6px 0 -5px var(--text),
     -6px 6px 0 -5px var(--text);
+}
+
+.ambient-player-dialog {
+  width: min(420px, calc(100% - 32px));
+  max-height: min(680px, calc(100vh - 48px));
+  padding: 18px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 24px 64px rgb(0 0 0 / 28%);
+}
+
+.ambient-player-dialog::backdrop {
+  background: rgb(10 14 22 / 55%);
+}
+
+.ambient-player-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.ambient-player-heading .panel-title {
+  margin-bottom: 0;
+}
+
+.ambient-player-controls {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 14px;
+}
+
+.ambient-play-button {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  place-items: center;
+  border-radius: 50%;
+}
+
+.ambient-play-icon {
+  display: block;
+  width: 0;
+  height: 0;
+  margin-left: 3px;
+  border-top: 9px solid transparent;
+  border-bottom: 9px solid transparent;
+  border-left: 14px solid currentColor;
+}
+
+.ambient-play-button.is-playing .ambient-play-icon {
+  width: 14px;
+  height: 18px;
+  margin-left: 0;
+  border: 0;
+  border-right: 4px solid currentColor;
+  border-left: 4px solid currentColor;
+}
+
+.ambient-volume-field {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.ambient-sound-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.ambient-volume-field span {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.ambient-sound-list {
+  display: grid;
+  gap: 10px;
+}
+
+.ambient-sound-toggle {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  place-items: center;
+  border-color: var(--border);
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.ambient-sound-toggle svg {
+  width: 22px;
+  height: 22px;
+}
+
+.ambient-sound-toggle.is-active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: white;
+}
+
+.ambient-player-dialog input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
 }
 
 .admin-build-hash {
