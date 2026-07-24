@@ -146,6 +146,8 @@ docker logs -f sam-nav
 
 若圖示網址無效，系統會先讀取卡片頁面的 HTML，依序嘗試 `rel="icon"`、Apple touch icon、mask icon 與社群圖片；若仍抓不到，再改用預設 favicon，最後才保留空白圖示。
 
+介面使用的音樂、播放、音效與日夜模式圖示皆為程式內嵌 SVG / CSS 圖形，沒有引用第三方圖示檔或圖示字型。卡片圖示則來自使用者設定的圖示網址、目標網站 favicon 或 Google favicon fallback，快取於 runtime `icon-cache/`，不屬於 repo 內建素材。
+
 ## 背景音播放器
 
 首頁背景音播放器的播放邏輯參考 [Moodist](https://github.com/remvze/moodist)：選取音源後開始播放、可疊加多個循環音源、支援全域音量與單軌音量，暫停與音量變化會使用淡入淡出。

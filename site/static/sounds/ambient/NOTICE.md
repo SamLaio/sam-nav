@@ -5,7 +5,7 @@
 | 檔案 | 顯示名稱 | 來源 | 授權 |
 | --- | --- | --- | --- |
 | `river.mp3` | River | Pixabay - River Sounds by DRAGON-STUDIO: https://pixabay.com/sound-effects/river-sounds-420904/ | Pixabay Content License |
-| `waves.mp3` | Waves | Pixabay - Waves SFX by SoundReality: https://pixabay.com/sound-effects/film-special-effects-waves-sfx-525010/ | Pixabay Content License |
+| `waves.mp3` | Waves | Pixabay - waves by freesound_community / chuwoyiwaidoushizhu (Freesound): https://pixabay.com/sound-effects/nature-waves-18067/ | Pixabay Content License |
 | `wind.mp3` | Wind | Pixabay - Wind sound by freesounds123: https://pixabay.com/sound-effects/nature-wind-sound-379042/ | Pixabay Content License |
 | `light-rain.mp3` | Light Rain | Pixabay - LIGHT RAIN by Liecio: https://pixabay.com/sound-effects/nature-light-rain-109591/ | Pixabay Content License |
 | `thunder.mp3` | Thunder | Pixabay - Loud Thunder by Universfield: https://pixabay.com/sound-effects/nature-loud-thunder-192165/ | Pixabay Content License |
