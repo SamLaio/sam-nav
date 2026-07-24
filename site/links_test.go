@@ -54,6 +54,10 @@ func TestNormalizeLinkIconKeepsValidImageAndFallsBack(t *testing.T) {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`<html><head><base href="/assets/"><link rel="apple-touch-icon" href="../image.png"></head></html>`))
+		case "/page-with-data-icon":
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`<html><head><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'%3E%3C/svg%3E"></head></html>`))
 		case "/get-only.png":
 			if r.Method == http.MethodHead {
 				w.WriteHeader(http.StatusMethodNotAllowed)
@@ -77,6 +81,7 @@ func TestNormalizeLinkIconKeepsValidImageAndFallsBack(t *testing.T) {
 	}{
 		{name: "空白先讀頁面 icon", url: server.URL + "/page-with-icon", icon: "", expected: server.URL + "/image.png"},
 		{name: "空白支援 base 與 apple touch icon", url: server.URL + "/page-with-base", icon: "", expected: server.URL + "/image.png"},
+		{name: "空白支援 HTML 內嵌圖示", url: server.URL + "/page-with-data-icon", icon: "", expected: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'%3E%3C/svg%3E"},
 		{name: "找不到頁面 icon 時補預設 favicon", url: server.URL + "/empty-page", icon: "", expected: testGeneratedFaviconURL(server.URL + "/empty-page")},
 		{name: "圖片網址保留", url: "https://example.com/docs", icon: server.URL + "/image.png", expected: server.URL + "/image.png"},
 		{name: "HEAD 失敗時改用 GET", url: "https://example.com/docs", icon: server.URL + "/get-only.png", expected: server.URL + "/get-only.png"},
@@ -109,6 +114,24 @@ func TestLinkIconURLHasImageAllowsSelfSignedHTTPS(t *testing.T) {
 
 	if !linkIconURLHasImage(context.Background(), server.URL+"/icon.png") {
 		t.Fatal("自簽 HTTPS 圖示應視為有效圖片")
+	}
+}
+
+func TestRefreshLinkIconCacheWritesDataImageIcon(t *testing.T) {
+	cacheDir := t.TempDir()
+	card := refreshLinkIconCache(context.Background(), cacheDir, linkCard{
+		ID:   1,
+		Icon: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'%3E%3C/svg%3E",
+	}, true)
+	if card.Icon == "" {
+		t.Fatal("內嵌圖示應保留來源並寫入快取")
+	}
+	content, contentType, ok := readCachedLinkIcon(cacheDir, 1)
+	if !ok {
+		t.Fatal("內嵌圖示應另存為快取檔")
+	}
+	if contentType != "image/svg+xml" || !strings.Contains(string(content), "<svg") {
+		t.Fatalf("快取內容應為 SVG 圖片，contentType=%q content=%q", contentType, string(content))
 	}
 }
 

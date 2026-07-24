@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -715,6 +716,9 @@ func resolveLinkIconURL(baseURL *url.URL, rawURL string) string {
 	if rawURL == "" {
 		return ""
 	}
+	if _, _, ok := parseDataImageIcon(rawURL); ok {
+		return rawURL
+	}
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
 		return ""
@@ -727,6 +731,9 @@ func resolveLinkIconURL(baseURL *url.URL, rawURL string) string {
 }
 
 func linkIconURLHasImage(ctx context.Context, icon string) bool {
+	if _, _, ok := parseDataImageIcon(icon); ok {
+		return true
+	}
 	parsed, err := url.Parse(strings.TrimSpace(icon))
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
 		return false
@@ -774,6 +781,9 @@ func linkIconRequestHasImage(ctx context.Context, method, icon string) bool {
 }
 
 func fetchLinkIconImage(ctx context.Context, icon string) ([]byte, string, bool) {
+	if content, contentType, ok := parseDataImageIcon(icon); ok {
+		return content, contentType, true
+	}
 	parsed, err := url.Parse(strings.TrimSpace(icon))
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
 		return nil, "", false
@@ -809,6 +819,48 @@ func fetchLinkIconImage(ctx context.Context, icon string) ([]byte, string, bool)
 		return nil, "", false
 	}
 	return content, detectedType, true
+}
+
+func parseDataImageIcon(icon string) ([]byte, string, bool) {
+	icon = strings.TrimSpace(icon)
+	if !strings.HasPrefix(strings.ToLower(icon), "data:image/") {
+		return nil, "", false
+	}
+	header, rawContent, ok := strings.Cut(icon[len("data:"):], ",")
+	if !ok {
+		return nil, "", false
+	}
+	parts := strings.Split(header, ";")
+	contentType := strings.ToLower(strings.TrimSpace(parts[0]))
+	if !strings.HasPrefix(contentType, "image/") {
+		return nil, "", false
+	}
+	var content []byte
+	var err error
+	if dataIconIsBase64(parts[1:]) {
+		content, err = base64.StdEncoding.DecodeString(rawContent)
+	} else {
+		var unescaped string
+		unescaped, err = url.PathUnescape(rawContent)
+		content = []byte(unescaped)
+	}
+	if err != nil || len(content) == 0 || len(content) > maxIconImageBytes {
+		return nil, "", false
+	}
+	detectedType := detectIconContentType(content)
+	if !strings.HasPrefix(detectedType, "image/") {
+		return nil, "", false
+	}
+	return content, contentType, true
+}
+
+func dataIconIsBase64(parts []string) bool {
+	for _, part := range parts {
+		if strings.EqualFold(strings.TrimSpace(part), "base64") {
+			return true
+		}
+	}
+	return false
 }
 
 func loadCachedLinkIcon(ctx context.Context, db *sql.DB, iconCacheDir string, id int64) ([]byte, string, bool) {
