@@ -117,6 +117,39 @@ func TestLinkIconURLHasImageAllowsSelfSignedHTTPS(t *testing.T) {
 	}
 }
 
+func TestListHomeLinksIncludesHiddenWhenAuthenticated(t *testing.T) {
+	db, err := openDatabase(t.TempDir() + "/nav.sqlite")
+	if err != nil {
+		t.Fatalf("openDatabase 發生錯誤：%v", err)
+	}
+	defer db.Close()
+
+	if _, err := db.Exec(`
+		INSERT INTO nav_links (title, url, description, category, icon, sort_order, hidden, updated_at)
+		VALUES
+			('Visible', 'https://visible.example.com', '', ?, '', 1, 0, CURRENT_TIMESTAMP),
+			('Hidden', 'https://hidden.example.com', '', ?, '', 2, 1, CURRENT_TIMESTAMP);
+	`, defaultCategoryName, defaultCategoryName); err != nil {
+		t.Fatalf("建立首頁卡片測試資料失敗：%v", err)
+	}
+
+	publicLinks, err := listHomeLinks(context.Background(), db, false)
+	if err != nil {
+		t.Fatalf("listHomeLinks(false) 發生錯誤：%v", err)
+	}
+	if len(publicLinks) != 1 || publicLinks[0].Hidden {
+		t.Fatalf("未登入首頁應只列公開卡片，取得：%v", publicLinks)
+	}
+
+	authenticatedLinks, err := listHomeLinks(context.Background(), db, true)
+	if err != nil {
+		t.Fatalf("listHomeLinks(true) 發生錯誤：%v", err)
+	}
+	if len(authenticatedLinks) != 2 || !authenticatedLinks[1].Hidden {
+		t.Fatalf("登入首頁應包含隱藏卡片，取得：%v", authenticatedLinks)
+	}
+}
+
 func TestRefreshLinkIconCacheWritesDataImageIcon(t *testing.T) {
 	cacheDir := t.TempDir()
 	card := refreshLinkIconCache(context.Background(), cacheDir, linkCard{

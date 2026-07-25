@@ -105,12 +105,13 @@ func main() {
 			settings = fallbackAppSettings(text)
 		}
 		languageProvider.useLanguage(settings.Language)
-		links, err := listVisibleLinks(c.Request.Context(), db)
+		includeHidden := auth.authenticated(c)
+		links, err := listHomeLinks(c.Request.Context(), db, includeHidden)
 		if err != nil {
 			log.Printf(text("log_load_links_failed"), err)
 			links = []linkCard{}
 		}
-		categories, err := listVisibleCategories(c.Request.Context(), db)
+		categories, err := listHomeCategories(c.Request.Context(), db, includeHidden)
 		if err != nil {
 			log.Printf(text("log_load_categories_failed"), err)
 			categories = []categoryBox{}

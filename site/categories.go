@@ -164,6 +164,13 @@ func listVisibleCategories(ctx context.Context, db *sql.DB) ([]categoryBox, erro
 	return categories, rows.Err()
 }
 
+func listHomeCategories(ctx context.Context, db *sql.DB, includeHidden bool) ([]categoryBox, error) {
+	if includeHidden {
+		return listCategories(ctx, db)
+	}
+	return listVisibleCategories(ctx, db)
+}
+
 func createCategory(ctx context.Context, db *sql.DB, name string, text textFunc) error {
 	name = cleanCategoryName(name)
 	if name == "" {

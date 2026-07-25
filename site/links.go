@@ -217,6 +217,13 @@ func listVisibleLinks(ctx context.Context, db *sql.DB) ([]linkCard, error) {
 	return queryLinks(ctx, db, "WHERE hidden = 0")
 }
 
+func listHomeLinks(ctx context.Context, db *sql.DB, includeHidden bool) ([]linkCard, error) {
+	if includeHidden {
+		return listAdminLinks(ctx, db)
+	}
+	return listVisibleLinks(ctx, db)
+}
+
 func listAdminLinks(ctx context.Context, db *sql.DB) ([]linkCard, error) {
 	return queryLinks(ctx, db, "")
 }

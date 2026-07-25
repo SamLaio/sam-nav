@@ -123,6 +123,51 @@ func TestListVisibleCategoriesOnlyShowsVisibleCardBoxes(t *testing.T) {
 	}
 }
 
+func TestListHomeCategoriesIncludesHiddenBoxesWhenAuthenticated(t *testing.T) {
+	db, err := openDatabase(t.TempDir() + "/nav.sqlite")
+	if err != nil {
+		t.Fatalf("openDatabase 發生錯誤：%v", err)
+	}
+	defer db.Close()
+
+	ctx := context.Background()
+	text := mustReadLanguage(defaultLanguageName).text
+	if err := createCategory(ctx, db, "文件", text); err != nil {
+		t.Fatalf("createCategory 發生錯誤：%v", err)
+	}
+	if _, err := db.Exec(`
+		INSERT INTO nav_links (title, url, description, category, icon, sort_order, hidden, updated_at)
+		VALUES ('Hidden Doc', 'https://doc.example.com', '', '文件', '', 1, 1, CURRENT_TIMESTAMP);
+	`); err != nil {
+		t.Fatalf("建立隱藏卡片測試資料失敗：%v", err)
+	}
+
+	publicCategories, err := listHomeCategories(ctx, db, false)
+	if err != nil {
+		t.Fatalf("listHomeCategories(false) 發生錯誤：%v", err)
+	}
+	for _, category := range publicCategories {
+		if category.Name == "文件" {
+			t.Fatalf("未登入首頁不應列出只有隱藏卡片的分類，取得：%v", publicCategories)
+		}
+	}
+
+	authenticatedCategories, err := listHomeCategories(ctx, db, true)
+	if err != nil {
+		t.Fatalf("listHomeCategories(true) 發生錯誤：%v", err)
+	}
+	found := false
+	for _, category := range authenticatedCategories {
+		if category.Name == "文件" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("登入首頁應列出只有隱藏卡片的分類，取得：%v", authenticatedCategories)
+	}
+}
+
 func TestUpdateCategoriesSort(t *testing.T) {
 	db, err := openDatabase(t.TempDir() + "/nav.sqlite")
 	if err != nil {
