@@ -25,6 +25,29 @@
 
   const normalizeText = (value) => String(value || "").trim().toLocaleLowerCase();
 
+  const directURLFromKeyword = (value) => {
+    const raw = String(value || "").trim();
+    if (!raw || /\s/.test(raw)) return "";
+
+    const hasWebScheme = /^https?:\/\//i.test(raw);
+    const hasProtocolRelativeURL = raw.startsWith("//");
+    const candidate = hasWebScheme
+      ? raw
+      : hasProtocolRelativeURL
+        ? `${window.location.protocol}${raw}`
+        : `https://${raw}`;
+
+    try {
+      const url = new URL(candidate);
+      const host = url.hostname;
+      const isLikelyHost = host === "localhost" || host.includes(".") || /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || Boolean(url.port);
+      if ((hasWebScheme || hasProtocolRelativeURL || isLikelyHost) && ["http:", "https:"].includes(url.protocol)) {
+        return url.href;
+      }
+    } catch (_) {}
+    return "";
+  };
+
   const fallbackIconURL = (rawURL) => {
     try {
       const url = new URL(rawURL);
@@ -126,10 +149,18 @@
 
   input.addEventListener("keydown", (event) => {
     const keyword = input.value.trim();
+    if (event.key !== "Enter" || !keyword) return;
+
+    event.preventDefault();
+    const directURL = directURLFromKeyword(keyword);
+    if (directURL) {
+      window.location.href = directURL;
+      return;
+    }
+
     const firstEngine = searchEngineLinks.find((link) => (link.getAttribute("data-search-template") || "").includes("%s"));
     const searchEngineURL = firstEngine ? firstEngine.getAttribute("data-search-template") : "";
-    if (event.key !== "Enter" || !keyword || !searchEngineURL.includes("%s")) return;
-    event.preventDefault();
+    if (!searchEngineURL.includes("%s")) return;
     window.location.href = searchEngineURL.replace("%s", encodeURIComponent(keyword));
   });
 
