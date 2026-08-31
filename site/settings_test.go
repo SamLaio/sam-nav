@@ -15,12 +15,13 @@ func TestUpdateAppSettingsLanguage(t *testing.T) {
 	ctx := context.Background()
 	text := mustReadLanguage(defaultLanguageName).text
 	settings, err := updateAppSettings(ctx, db, settingsPayload{
-		SiteTitle:       "Sam Nav",
-		Language:        "en",
-		DefaultTheme:    "dark",
-		OpenNewTab:      true,
-		SearchEngineURL: "https://www.google.com/search?q=%s",
-		AdminUsername:   "admin",
+		SiteTitle:          "Sam Nav",
+		Language:           "en",
+		DefaultTheme:       "dark",
+		OpenNewTab:         true,
+		SearchEngineURL:    "https://www.google.com/search?q=%s",
+		SearchHistoryLimit: defaultSearchHistoryLimit,
+		AdminUsername:      "admin",
 	}, text)
 	if err != nil {
 		t.Fatalf("updateAppSettings 發生錯誤：%v", err)
@@ -46,10 +47,11 @@ func TestUpdateAppSettingsRejectsInvalidLanguage(t *testing.T) {
 	defer db.Close()
 
 	_, err = updateAppSettings(context.Background(), db, settingsPayload{
-		SiteTitle:     "Sam Nav",
-		Language:      "missing",
-		DefaultTheme:  "light",
-		AdminUsername: "admin",
+		SiteTitle:          "Sam Nav",
+		Language:           "missing",
+		DefaultTheme:       "light",
+		SearchHistoryLimit: defaultSearchHistoryLimit,
+		AdminUsername:      "admin",
 	}, mustReadLanguage(defaultLanguageName).text)
 	if err == nil {
 		t.Fatal("不支援的系統語言應回傳錯誤")

@@ -6,8 +6,11 @@
   const empty = document.getElementById("search-empty");
   const searchEnginePanel = document.getElementById("search-engine-panel");
   const searchEngineLinks = Array.from(document.querySelectorAll(".search-engine-link"));
+  const searchHistoryPanel = document.getElementById("search-history-panel");
+  const searchHistorySuggestions = document.getElementById("search-history-suggestions");
   const categoryStorageKey = "samNav.front.category";
   let selectedCategory = "";
+  let searchHistoryTimer = 0;
 
   const readStoredCategory = () => {
     try {
@@ -24,6 +27,77 @@
   };
 
   const normalizeText = (value) => String(value || "").trim().toLocaleLowerCase();
+
+  const requestJSON = async (url, options) => {
+    const response = await fetch(url, {
+      headers: {
+        "Content-Type": "application/json"
+      },
+      ...options
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.success) {
+      throw new Error(payload.errorMessage || "Operation failed");
+    }
+    return payload.data;
+  };
+
+  const recordSearchHistory = (keyword) => {
+    keyword = String(keyword || "").trim();
+    if (!keyword) return;
+    fetch("/api/search-history", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ keyword }),
+      keepalive: true
+    }).catch(() => {});
+  };
+
+  const hideSearchHistory = () => {
+    if (searchHistoryPanel) searchHistoryPanel.hidden = true;
+  };
+
+  const renderSearchHistory = (items) => {
+    if (!searchHistoryPanel || !searchHistorySuggestions) return;
+    searchHistorySuggestions.innerHTML = "";
+    if (!items.length || document.activeElement !== input) {
+      hideSearchHistory();
+      return;
+    }
+    items.forEach((item) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "search-history-suggestion";
+      button.textContent = item.keyword || "";
+      button.addEventListener("mousedown", (event) => event.preventDefault());
+      button.addEventListener("click", () => {
+        input.value = item.keyword || "";
+        applyFilters();
+        hideSearchHistory();
+        input.focus();
+      });
+      searchHistorySuggestions.appendChild(button);
+    });
+    searchHistoryPanel.hidden = false;
+  };
+
+  const refreshSearchHistory = async () => {
+    if (!searchHistoryPanel || !searchHistorySuggestions || document.activeElement !== input) return;
+    try {
+      const keyword = input.value.trim();
+      const items = await requestJSON(`/api/search-history?q=${encodeURIComponent(keyword)}&limit=10`);
+      renderSearchHistory(items || []);
+    } catch (_) {
+      hideSearchHistory();
+    }
+  };
+
+  const queueSearchHistoryRefresh = () => {
+    window.clearTimeout(searchHistoryTimer);
+    searchHistoryTimer = window.setTimeout(refreshSearchHistory, 120);
+  };
 
   const directURLFromKeyword = (value) => {
     const raw = String(value || "").trim();
@@ -146,12 +220,24 @@
   }
 
   input.addEventListener("input", applyFilters);
+  input.addEventListener("input", queueSearchHistoryRefresh);
+  input.addEventListener("focus", refreshSearchHistory);
+
+  document.addEventListener("click", (event) => {
+    if (event.target === input || event.target.closest("#search-history-panel")) return;
+    hideSearchHistory();
+  });
 
   input.addEventListener("keydown", (event) => {
     const keyword = input.value.trim();
+    if (event.key === "Escape") {
+      hideSearchHistory();
+      return;
+    }
     if (event.key !== "Enter" || !keyword) return;
 
     event.preventDefault();
+    recordSearchHistory(keyword);
     const directURL = directURLFromKeyword(keyword);
     if (directURL) {
       window.location.href = directURL;
@@ -162,6 +248,12 @@
     const searchEngineURL = firstEngine ? firstEngine.getAttribute("data-search-template") : "";
     if (!searchEngineURL.includes("%s")) return;
     window.location.href = searchEngineURL.replace("%s", encodeURIComponent(keyword));
+  });
+
+  searchEngineLinks.forEach((link) => {
+    link.addEventListener("click", () => {
+      recordSearchHistory(input.value.trim());
+    });
   });
 
   applyFilters();

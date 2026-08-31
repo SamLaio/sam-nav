@@ -29,6 +29,13 @@
   const searchEngineEmpty = document.getElementById("search-engine-empty");
   const searchEngineCount = document.getElementById("search-engine-count");
   const searchEngineMessage = document.getElementById("search-engine-message");
+  const searchHistoryList = document.getElementById("search-history-list");
+  const searchHistoryEmpty = document.getElementById("search-history-empty");
+  const searchHistoryCount = document.getElementById("search-history-count");
+  const searchHistoryMessage = document.getElementById("search-history-message");
+  const searchHistoryLimit = document.getElementById("search-history-limit");
+  const deleteSearchHistorySelectedButton = document.querySelector('[data-action="delete-search-history-selected"]');
+  const clearSearchHistoryButton = document.querySelector('[data-action="clear-search-history"]');
   const adminLayout = document.querySelector(".admin-layout");
   const updateIconsButton = document.querySelector('[data-action="update-icons"]');
   if (!list || !createForm || !editForm) return;
@@ -36,6 +43,7 @@
   let links = [];
   let categories = [];
   let searchEngines = [];
+  let searchHistory = [];
   let activeCategoryCombobox = null;
   let completeDialogResolver = null;
   const t = (key, fallback) => list.dataset[key] || fallback;
@@ -53,7 +61,7 @@
       },
       ...options
     });
-    const payload = await response.json();
+    const payload = await readJSONResponse(response);
     if (response.status === 401) {
       window.location.href = "/admin/login";
       throw new Error(payload.errorMessage || t("errorFallback", "Unauthorized"));
@@ -71,10 +79,31 @@
       throw new Error(t("errorFallback", "Unauthorized"));
     }
     if (!response.ok) {
-      const payload = await response.json();
-      throw new Error(payload.errorMessage || t("errorFallback", "Operation failed"));
+      throw new Error(await readErrorResponse(response));
     }
     return response;
+  };
+
+  const readJSONResponse = async (response) => {
+    const text = await response.text();
+    try {
+      return JSON.parse(text);
+    } catch (_) {
+      throw new Error(text.trim() || `${t("errorFallback", "Operation failed")} (${response.status})`);
+    }
+  };
+
+  const readErrorResponse = async (response) => {
+    const text = (await response.text().catch(() => "")).trim();
+    if (text) {
+      try {
+        const payload = JSON.parse(text);
+        return payload.errorMessage || payload.message || text;
+      } catch (_) {
+        return text;
+      }
+    }
+    return `${t("errorFallback", "Operation failed")} (${response.status})`;
   };
 
   const filenameFromResponse = (response, fallback) => {
@@ -189,6 +218,20 @@
     renderLinks();
     renderBoxes();
     renderSearchEngines();
+    loadSearchHistory().catch((error) => {
+      showMessage(searchHistoryMessage, error.message, true);
+    });
+  };
+
+  const selectedSearchHistoryLimit = () => {
+    const limit = Number(searchHistoryLimit?.value);
+    return Number.isFinite(limit) && limit > 0 ? limit : 50;
+  };
+
+  const loadSearchHistory = async () => {
+    if (!searchHistoryList) return;
+    searchHistory = await requestJSON(`/api/admin/search-history?limit=${selectedSearchHistoryLimit()}`);
+    renderSearchHistory();
   };
 
   const fallbackIconText = (title) => {
@@ -385,6 +428,7 @@
       openNewTab: settingsData.get("openNewTab") === "on",
       background: String(settingsData.get("background") || "").trim(),
       searchEngineURL: String(settingsData.get("searchEngineURL") || "").trim(),
+      searchHistoryLimit: Number(settingsData.get("searchHistoryLimit")) || 1000,
       adminUsername: String(adminData.get("adminUsername") || "").trim(),
       newPassword: String(adminData.get("newPassword") || "")
     };
@@ -449,6 +493,35 @@
       item.querySelector('[data-action="edit-search-engine"]').textContent = t("buttonEdit", "Edit");
       item.querySelector('[data-action="delete-search-engine"]').textContent = t("buttonDelete", "Delete");
       searchEngineList.appendChild(item);
+    });
+  };
+
+  const renderSearchHistory = () => {
+    if (!searchHistoryList) return;
+    searchHistoryList.innerHTML = "";
+    if (searchHistoryCount) searchHistoryCount.textContent = String(searchHistory.length);
+    if (searchHistoryEmpty) searchHistoryEmpty.hidden = searchHistory.length > 0;
+
+    searchHistory.forEach((history) => {
+      const item = document.createElement("li");
+      item.dataset.searchHistoryId = String(history.id);
+      item.innerHTML = `
+        <label class="admin-hidden-toggle search-history-select">
+          <input type="checkbox" data-action="select-search-history">
+          <span></span>
+        </label>
+        <span class="admin-link-main">
+          <span class="admin-link-title"></span>
+          <span class="admin-link-url"></span>
+        </span>
+        <span class="status-pill"></span>
+        <button type="button" class="text-button danger-button" data-action="delete-search-history"></button>
+      `;
+      item.querySelector(".admin-link-title").textContent = history.keyword || "";
+      item.querySelector(".admin-link-url").textContent = history.lastUsedAt || "";
+      item.querySelector(".status-pill").textContent = String(history.hitCount || 0);
+      item.querySelector('[data-action="delete-search-history"]').textContent = t("buttonDelete", "Delete");
+      searchHistoryList.appendChild(item);
     });
   };
 
@@ -887,6 +960,75 @@
     }
   });
 
+  searchHistoryLimit?.addEventListener("change", async () => {
+    showMessage(searchHistoryMessage, "");
+    try {
+      await loadSearchHistory();
+    } catch (error) {
+      showMessage(searchHistoryMessage, error.message, true);
+    }
+  });
+
+  const selectedSearchHistoryIDs = () => {
+    if (!searchHistoryList) return [];
+    return Array.from(searchHistoryList.querySelectorAll('[data-action="select-search-history"]:checked'))
+      .map((input) => Number(input.closest("[data-search-history-id]")?.dataset.searchHistoryId))
+      .filter((id) => Number.isFinite(id) && id > 0);
+  };
+
+  const deleteSearchHistory = async (payload) => {
+    await requestJSON("/api/admin/search-history", {
+      method: "DELETE",
+      body: JSON.stringify(payload)
+    });
+    await loadSearchHistory();
+    showMessage(searchHistoryMessage, t("messageSearchHistoryDeleted", "Search history deleted"));
+  };
+
+  searchHistoryList?.addEventListener("click", async (event) => {
+    const button = event.target.closest('button[data-action="delete-search-history"]');
+    if (!button) return;
+    const item = button.closest("[data-search-history-id]");
+    const id = Number(item?.dataset.searchHistoryId);
+    const history = searchHistory.find((candidate) => candidate.id === id);
+    if (!history) return;
+    if (!window.confirm(`${t("confirmDeleteSearchHistoryPrefix", "Delete search history \"")}${history.keyword}${t("confirmDeleteSearchHistorySuffix", "\"?")}`)) return;
+    try {
+      await requestJSON(`/api/admin/search-history/${id}`, {
+        method: "DELETE"
+      });
+      await loadSearchHistory();
+      showMessage(searchHistoryMessage, t("messageSearchHistoryDeleted", "Search history deleted"));
+    } catch (error) {
+      showMessage(searchHistoryMessage, error.message, true);
+    }
+  });
+
+  deleteSearchHistorySelectedButton?.addEventListener("click", async () => {
+    const ids = selectedSearchHistoryIDs();
+    showMessage(searchHistoryMessage, "");
+    if (ids.length === 0) {
+      showMessage(searchHistoryMessage, t("errorSearchHistorySelectionRequired", "Select search history first"), true);
+      return;
+    }
+    if (!window.confirm(t("confirmDeleteSelectedSearchHistory", "Delete selected search history?"))) return;
+    try {
+      await deleteSearchHistory({ ids });
+    } catch (error) {
+      showMessage(searchHistoryMessage, error.message, true);
+    }
+  });
+
+  clearSearchHistoryButton?.addEventListener("click", async () => {
+    showMessage(searchHistoryMessage, "");
+    if (!window.confirm(t("confirmClearSearchHistory", "Clear all search history?"))) return;
+    try {
+      await deleteSearchHistory({ all: true });
+    } catch (error) {
+      showMessage(searchHistoryMessage, error.message, true);
+    }
+  });
+
   if (categoryFilter) {
     categoryFilter.addEventListener("change", renderLinks);
   }
@@ -951,6 +1093,7 @@
       const currentLanguage = document.documentElement.lang || "";
       const settings = await saveSettings();
       applySettingsResponse(settings);
+      await loadSearchHistory();
       if (settings.language && settings.language !== currentLanguage) {
         window.location.reload();
         return;
@@ -967,6 +1110,7 @@
     try {
       const settings = await saveSettings();
       applySettingsResponse(settings);
+      await loadSearchHistory();
       showMessage(adminSettingsMessage, t("messageSettingsUpdated", "Settings saved"));
     } catch (error) {
       showMessage(adminSettingsMessage, error.message, true);

@@ -125,6 +125,21 @@ func TestAdminRoutes(t *testing.T) {
 		t.Fatalf("匯出卡片應包含 links：%s", exportCards.Body.String())
 	}
 
+	exportAll := httptest.NewRecorder()
+	exportAllRequest := httptest.NewRequest(http.MethodGet, "/api/admin/export/all", nil)
+	for _, cookie := range cookies {
+		exportAllRequest.AddCookie(cookie)
+	}
+	router.ServeHTTP(exportAll, exportAllRequest)
+	if exportAll.Code != http.StatusOK {
+		t.Fatalf("匯出全部資料應成功，取得 %d：%s", exportAll.Code, exportAll.Body.String())
+	}
+	for _, content := range []string{`"scope": "all"`, `"links"`, `"settings"`, `"searchEngines"`} {
+		if !strings.Contains(exportAll.Body.String(), content) {
+			t.Fatalf("匯出全部資料缺少 %s：%s", content, exportAll.Body.String())
+		}
+	}
+
 	theme := httptest.NewRecorder()
 	themeRequest := httptest.NewRequest(http.MethodPut, "/api/theme", strings.NewReader(`{"theme":"dark"}`))
 	themeRequest.Header.Set("Content-Type", "application/json")

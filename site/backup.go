@@ -115,7 +115,6 @@ func exportBackup(ctx context.Context, db *sql.DB, scope string, text textFunc) 
 		if err != nil {
 			return backupFile{}, err
 		}
-		links = normalizeBackupLinkIcons(ctx, links)
 		backup.Categories = categories
 		backup.Links = links
 	}
@@ -355,15 +354,6 @@ func prepareCardsBackup(ctx context.Context, categories []categoryBox, links []l
 	return preparedCategories, preparedLinks, nil
 }
 
-func normalizeBackupLinkIcons(ctx context.Context, links []linkCard) []linkCard {
-	normalized := make([]linkCard, 0, len(links))
-	for _, link := range links {
-		link.Icon = strings.TrimSpace(link.Icon)
-		normalized = append(normalized, normalizeLinkIcon(ctx, link))
-	}
-	return normalized
-}
-
 func importSettingsBackup(ctx context.Context, db *sql.DB, settings appSettings, text textFunc) (appSettings, error) {
 	if strings.TrimSpace(settings.SiteTitle) == "" {
 		settings.SiteTitle = env("SAM_NAV_SITE_TITLE", "Sam Nav")
@@ -377,13 +367,15 @@ func importSettingsBackup(ctx context.Context, db *sql.DB, settings appSettings,
 	if strings.TrimSpace(settings.AdminUsername) == "" {
 		settings.AdminUsername = env("SAM_NAV_AUTH_USERNAME", "admin")
 	}
+	settings.SearchHistoryLimit = normalizeSearchHistoryLimit(settings.SearchHistoryLimit)
 	return updateAppSettings(ctx, db, settingsPayload{
-		SiteTitle:       settings.SiteTitle,
-		Language:        settings.Language,
-		DefaultTheme:    settings.DefaultTheme,
-		OpenNewTab:      settings.OpenNewTab,
-		Background:      settings.Background,
-		SearchEngineURL: settings.SearchEngineURL,
-		AdminUsername:   settings.AdminUsername,
+		SiteTitle:          settings.SiteTitle,
+		Language:           settings.Language,
+		DefaultTheme:       settings.DefaultTheme,
+		OpenNewTab:         settings.OpenNewTab,
+		Background:         settings.Background,
+		SearchEngineURL:    settings.SearchEngineURL,
+		SearchHistoryLimit: settings.SearchHistoryLimit,
+		AdminUsername:      settings.AdminUsername,
 	}, text)
 }

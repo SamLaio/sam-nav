@@ -206,8 +206,7 @@ func TestImportCardsBackupNormalizesIconURL(t *testing.T) {
 	}
 }
 
-func TestExportCardsBackupNormalizesIconURL(t *testing.T) {
-	withTestGoogleFaviconClient(t)
+func TestExportCardsBackupKeepsStoredIconURL(t *testing.T) {
 	db, err := openDatabase(t.TempDir() + "/nav.sqlite")
 	if err != nil {
 		t.Fatalf("openDatabase 發生錯誤：%v", err)
@@ -239,8 +238,8 @@ func TestExportCardsBackupNormalizesIconURL(t *testing.T) {
 	if len(backup.Links) != 1 {
 		t.Fatalf("匯出卡片數量 = %d，預期 1", len(backup.Links))
 	}
-	if backup.Links[0].Icon != "https://www.google.com/s2/favicons?domain=broken.example.com&sz=64" {
-		t.Fatalf("匯出壞圖示應改補 favicon，取得：%s", backup.Links[0].Icon)
+	if backup.Links[0].Icon != server.URL+"/page.html" {
+		t.Fatalf("匯出應保留資料庫中的圖示網址，取得：%s", backup.Links[0].Icon)
 	}
 }
 

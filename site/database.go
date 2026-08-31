@@ -45,6 +45,10 @@ func openDatabase(dbPath string) (*sql.DB, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := migrateSearchHistory(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return db, nil
 }
 
@@ -278,6 +282,23 @@ func migrateSearchEngines(db *sql.DB) error {
 		strings.TrimSpace(url),
 	); err != nil {
 		return fmt.Errorf("轉換舊搜尋引擎設定失敗：%w", err)
+	}
+	return nil
+}
+
+func migrateSearchHistory(db *sql.DB) error {
+	sqlCreateTable := `
+		CREATE TABLE IF NOT EXISTS nav_search_history (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			keyword TEXT NOT NULL,
+			normalized_keyword TEXT NOT NULL UNIQUE,
+			hit_count INTEGER NOT NULL DEFAULT 1,
+			last_used_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+	`
+	if _, err := db.Exec(sqlCreateTable); err != nil {
+		return fmt.Errorf("建立搜尋歷史資料表失敗：%w", err)
 	}
 	return nil
 }

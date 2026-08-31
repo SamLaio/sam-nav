@@ -56,7 +56,7 @@ func main() {
 
 	languageProvider := newLanguageProvider(env("SAM_NAV_LANG", defaultLanguageName))
 	text := languageProvider.text
-	appVersion := env("SAM_NAV_VERSION", "v0.5")
+	appVersion := env("SAM_NAV_VERSION", "v0.8.0")
 	appBuildHash := buildHash()
 
 	dataDir := env("SAM_NAV_DATA_DIR", "./data")
@@ -188,6 +188,7 @@ func main() {
 	registerLinkRoutes(router, adminAPI, db, text, iconCacheDir)
 	registerCategoryRoutes(adminAPI, db, text)
 	registerSearchEngineRoutes(adminAPI, db, text)
+	registerSearchHistoryRoutes(router, adminAPI, db, text)
 	registerSettingsRoutes(router, adminAPI, db, text, languageProvider.useLanguage)
 	registerBackupRoutes(adminAPI, db, text, languageProvider.useLanguage, iconCacheDir)
 
@@ -434,12 +435,13 @@ func fallbackAppSettings(text textFunc) appSettings {
 		theme = "light"
 	}
 	return appSettings{
-		SiteTitle:       env("SAM_NAV_SITE_TITLE", text("default_title")),
-		Language:        language,
-		DefaultTheme:    theme,
-		OpenNewTab:      env("SAM_NAV_OPEN_IN_NEW_TAB", "1") == "1",
-		AdminUsername:   env("SAM_NAV_AUTH_USERNAME", "admin"),
-		SearchEngineURL: "",
+		SiteTitle:          env("SAM_NAV_SITE_TITLE", text("default_title")),
+		Language:           language,
+		DefaultTheme:       theme,
+		OpenNewTab:         env("SAM_NAV_OPEN_IN_NEW_TAB", "1") == "1",
+		AdminUsername:      env("SAM_NAV_AUTH_USERNAME", "admin"),
+		SearchEngineURL:    "",
+		SearchHistoryLimit: defaultSearchHistoryLimit,
 	}
 }
 

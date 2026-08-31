@@ -26,6 +26,7 @@
         <button type="button" class="admin-nav-button is-active" data-view-target="boxes">{{ t "nav_boxes" }}</button>
         <button type="button" class="admin-nav-button" data-view-target="links">{{ t "nav_link_management" }}</button>
         <button type="button" class="admin-nav-button" data-view-target="search-engines">{{ t "nav_search_management" }}</button>
+        <button type="button" class="admin-nav-button" data-view-target="search-history">{{ t "nav_search_history" }}</button>
         <button type="button" class="admin-nav-button" data-view-target="settings">{{ t "nav_system_settings" }}</button>
       </nav>
 
@@ -83,6 +84,7 @@
               data-message-search-engine-created="{{ t "message_search_engine_created" }}"
               data-message-search-engine-updated="{{ t "message_search_engine_updated" }}"
               data-message-search-engine-deleted="{{ t "message_search_engine_deleted" }}"
+              data-message-search-history-deleted="{{ t "message_search_history_deleted" }}"
               data-message-export-downloaded="{{ t "message_export_downloaded" }}"
               data-message-import-completed="{{ t "message_import_completed" }}"
               data-message-export-processing="{{ t "message_export_processing" }}"
@@ -96,10 +98,15 @@
               data-confirm-delete-category-suffix="{{ t "confirm_delete_category_suffix" }}"
               data-confirm-delete-search-engine-prefix="{{ t "confirm_delete_search_engine_prefix" }}"
               data-confirm-delete-search-engine-suffix="{{ t "confirm_delete_search_engine_suffix" }}"
+              data-confirm-delete-search-history-prefix="{{ t "confirm_delete_search_history_prefix" }}"
+              data-confirm-delete-search-history-suffix="{{ t "confirm_delete_search_history_suffix" }}"
+              data-confirm-delete-selected-search-history="{{ t "confirm_delete_selected_search_history" }}"
+              data-confirm-clear-search-history="{{ t "confirm_clear_search_history" }}"
               data-confirm-import-prefix="{{ t "confirm_import_prefix" }}"
               data-confirm-import-suffix="{{ t "confirm_import_suffix" }}"
               data-prompt-rename-category="{{ t "prompt_rename_category" }}"
               data-error-no-import-file="{{ t "error_no_import_file" }}"
+              data-error-search-history-selection-required="{{ t "error_search_history_selection_required" }}"
             >
               {{ range .Links }}
                 <li data-id="{{ .ID }}">
@@ -139,6 +146,20 @@
           </section>
         </section>
 
+        <section class="admin-view" data-view="search-history">
+          <section class="panel">
+            <div class="panel-heading">
+              <div class="panel-title">{{ t "search_history_title" }}</div>
+              <div class="panel-actions">
+                <span id="search-history-count" class="status-pill">0</span>
+              </div>
+            </div>
+            <ul id="search-history-list" class="sortable-list search-history-list"></ul>
+            <p id="search-history-empty" class="empty-inline" hidden>{{ t "search_history_empty" }}</p>
+            <p id="search-history-message" class="admin-message" role="status" aria-live="polite"></p>
+          </section>
+        </section>
+
         <section class="admin-view" data-view="settings">
           <section class="panel">
             <div class="panel-title">{{ t "settings_title" }}</div>
@@ -169,6 +190,10 @@
               <label class="checkbox-field">
                 <input name="openNewTab" type="checkbox" {{ if .Settings.OpenNewTab }}checked{{ end }}>
                 <span>{{ t "field_open_new_tab" }}</span>
+              </label>
+              <label>
+                <span>{{ t "field_search_history_limit" }}</span>
+                <input name="searchHistoryLimit" type="number" min="1" max="1000" step="1" required value="{{ .Settings.SearchHistoryLimit }}">
               </label>
               <div class="form-actions">
                 <button type="submit">{{ t "button_save_settings" }}</button>
@@ -283,6 +308,22 @@
             </label>
             <button type="submit">{{ t "button_create_search_engine" }}</button>
           </form>
+        </div>
+        <div class="panel admin-aside-view" data-aside-view="search-history">
+          <div class="panel-title">{{ t "search_history_display_title" }}</div>
+          <div class="stack-form">
+            <label>
+              <span>{{ t "field_search_history_display_limit" }}</span>
+              <select id="search-history-limit">
+                <option value="25">25</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+                <option value="200">200</option>
+              </select>
+            </label>
+            <button type="button" class="secondary-button danger-button" data-action="delete-search-history-selected">{{ t "button_delete_selected" }}</button>
+            <button type="button" class="secondary-button danger-button" data-action="clear-search-history">{{ t "button_clear_all" }}</button>
+          </div>
         </div>
       </aside>
     </div>

@@ -7,42 +7,46 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 )
 
 const (
-	settingSiteTitle         = "site_title"
-	settingLanguage          = "language"
-	settingDefaultTheme      = "default_theme"
-	settingOpenNewTab        = "open_new_tab"
-	settingBackground        = "background"
-	settingSearchEngineURL   = "search_engine_url"
-	settingAdminUsername     = "admin_username"
-	settingAdminPasswordHash = "admin_password_hash"
-	settingAdminPasswordSalt = "admin_password_salt"
+	settingSiteTitle          = "site_title"
+	settingLanguage           = "language"
+	settingDefaultTheme       = "default_theme"
+	settingOpenNewTab         = "open_new_tab"
+	settingBackground         = "background"
+	settingSearchEngineURL    = "search_engine_url"
+	settingSearchHistoryLimit = "search_history_limit"
+	settingAdminUsername      = "admin_username"
+	settingAdminPasswordHash  = "admin_password_hash"
+	settingAdminPasswordSalt  = "admin_password_salt"
 )
 
 type appSettings struct {
-	SiteTitle       string `json:"siteTitle"`
-	Language        string `json:"language"`
-	DefaultTheme    string `json:"defaultTheme"`
-	OpenNewTab      bool   `json:"openNewTab"`
-	Background      string `json:"background"`
-	SearchEngineURL string `json:"searchEngineURL"`
-	AdminUsername   string `json:"adminUsername"`
+	SiteTitle          string `json:"siteTitle"`
+	Language           string `json:"language"`
+	DefaultTheme       string `json:"defaultTheme"`
+	OpenNewTab         bool   `json:"openNewTab"`
+	Background         string `json:"background"`
+	SearchEngineURL    string `json:"searchEngineURL"`
+	SearchHistoryLimit int    `json:"searchHistoryLimit"`
+	AdminUsername      string `json:"adminUsername"`
 }
 
 type settingsPayload struct {
-	SiteTitle       string `json:"siteTitle"`
-	Language        string `json:"language"`
-	DefaultTheme    string `json:"defaultTheme"`
-	OpenNewTab      bool   `json:"openNewTab"`
-	Background      string `json:"background"`
-	SearchEngineURL string `json:"searchEngineURL"`
-	AdminUsername   string `json:"adminUsername"`
-	NewPassword     string `json:"newPassword"`
+	SiteTitle          string `json:"siteTitle"`
+	Language           string `json:"language"`
+	DefaultTheme       string `json:"defaultTheme"`
+	OpenNewTab         bool   `json:"openNewTab"`
+	Background         string `json:"background"`
+	SearchEngineURL    string `json:"searchEngineURL"`
+	SearchHistoryLimit int    `json:"searchHistoryLimit"`
+	AdminUsername      string `json:"adminUsername"`
+	NewPassword        string `json:"newPassword"`
 }
 
 type themePayload struct {
@@ -125,6 +129,10 @@ func loadAppSettings(ctx context.Context, db *sql.DB) (appSettings, error) {
 	if err != nil {
 		return appSettings{}, err
 	}
+	searchHistoryLimitValue, err := getSetting(ctx, db, settingSearchHistoryLimit, env("SAM_NAV_SEARCH_HISTORY_LIMIT", strconv.Itoa(defaultSearchHistoryLimit)))
+	if err != nil {
+		return appSettings{}, err
+	}
 	adminUsername, err := getSetting(ctx, db, settingAdminUsername, env("SAM_NAV_AUTH_USERNAME", "admin"))
 	if err != nil {
 		return appSettings{}, err
@@ -138,15 +146,21 @@ func loadAppSettings(ctx context.Context, db *sql.DB) (appSettings, error) {
 	if theme == "" {
 		theme = "light"
 	}
+	searchHistoryLimit, err := strconv.Atoi(strings.TrimSpace(searchHistoryLimitValue))
+	if err != nil {
+		searchHistoryLimit = defaultSearchHistoryLimit
+	}
+	searchHistoryLimit = normalizeSearchHistoryLimit(searchHistoryLimit)
 
 	return appSettings{
-		SiteTitle:       title,
-		Language:        language,
-		DefaultTheme:    theme,
-		OpenNewTab:      openNewTab == "1",
-		Background:      background,
-		SearchEngineURL: searchEngineURL,
-		AdminUsername:   adminUsername,
+		SiteTitle:          title,
+		Language:           language,
+		DefaultTheme:       theme,
+		OpenNewTab:         openNewTab == "1",
+		Background:         background,
+		SearchEngineURL:    searchEngineURL,
+		SearchHistoryLimit: searchHistoryLimit,
+		AdminUsername:      adminUsername,
 	}, nil
 }
 
@@ -173,6 +187,9 @@ func updateAppSettings(ctx context.Context, db *sql.DB, payload settingsPayload,
 	if payload.SearchEngineURL != "" && !strings.Contains(payload.SearchEngineURL, "%s") {
 		return appSettings{}, errors.New(text("error_search_engine_placeholder_required"))
 	}
+	if payload.SearchHistoryLimit <= 0 || payload.SearchHistoryLimit > maxSearchHistoryLimit {
+		return appSettings{}, errors.New(text("error_search_history_limit_range"))
+	}
 
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -181,13 +198,14 @@ func updateAppSettings(ctx context.Context, db *sql.DB, payload settingsPayload,
 	defer tx.Rollback()
 
 	values := map[string]string{
-		settingSiteTitle:       payload.SiteTitle,
-		settingLanguage:        payload.Language,
-		settingDefaultTheme:    payload.DefaultTheme,
-		settingOpenNewTab:      boolSetting(payload.OpenNewTab),
-		settingBackground:      payload.Background,
-		settingSearchEngineURL: payload.SearchEngineURL,
-		settingAdminUsername:   payload.AdminUsername,
+		settingSiteTitle:          payload.SiteTitle,
+		settingLanguage:           payload.Language,
+		settingDefaultTheme:       payload.DefaultTheme,
+		settingOpenNewTab:         boolSetting(payload.OpenNewTab),
+		settingBackground:         payload.Background,
+		settingSearchEngineURL:    payload.SearchEngineURL,
+		settingSearchHistoryLimit: strconv.Itoa(payload.SearchHistoryLimit),
+		settingAdminUsername:      payload.AdminUsername,
 	}
 	for key, value := range values {
 		if err := setSettingTx(ctx, tx, key, value); err != nil {
@@ -206,6 +224,9 @@ func updateAppSettings(ctx context.Context, db *sql.DB, payload settingsPayload,
 		if err := setSettingTx(ctx, tx, settingAdminPasswordHash, hash); err != nil {
 			return appSettings{}, err
 		}
+	}
+	if err := pruneSearchHistoryTx(ctx, tx, payload.SearchHistoryLimit); err != nil {
+		return appSettings{}, err
 	}
 
 	if err := tx.Commit(); err != nil {
