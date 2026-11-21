@@ -34,8 +34,8 @@ type deleteSearchHistoryPayload struct {
 	All bool    `json:"all"`
 }
 
-func registerSearchHistoryRoutes(router *gin.Engine, admin *gin.RouterGroup, db *sql.DB, text textFunc) {
-	router.GET("/api/search-history", func(c *gin.Context) {
+func registerSearchHistoryRoutes(router *gin.Engine, admin *gin.RouterGroup, db *sql.DB, text textFunc, auth *authService) {
+	router.GET("/api/search-history", auth.requireAPI(), func(c *gin.Context) {
 		items, err := listSearchHistory(c.Request.Context(), db, c.Query("q"), queryLimit(c, defaultSearchHistorySuggestionLimit, defaultSearchHistorySuggestionLimit))
 		if err != nil {
 			jsonError(c, http.StatusInternalServerError, err)
@@ -44,7 +44,7 @@ func registerSearchHistoryRoutes(router *gin.Engine, admin *gin.RouterGroup, db 
 		jsonOK(c, text("api_search_history_loaded"), items)
 	})
 
-	router.POST("/api/search-history", func(c *gin.Context) {
+	router.POST("/api/search-history", auth.requireAPI(), func(c *gin.Context) {
 		var payload searchHistoryPayload
 		if err := c.ShouldBindJSON(&payload); err != nil {
 			jsonError(c, http.StatusBadRequest, err)

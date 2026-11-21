@@ -25,6 +25,27 @@ func TestPasswordHash(t *testing.T) {
 	}
 }
 
+func TestSessionCookiesAreSecure(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	auth := &authService{secret: []byte("test-secret")}
+	for _, clear := range []bool{false, true} {
+		response := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(response)
+		if clear {
+			auth.clearSession(c)
+		} else {
+			auth.setSession(c, "admin")
+		}
+		cookies := response.Result().Cookies()
+		if len(cookies) != 1 || !cookies[0].Secure || !cookies[0].HttpOnly || cookies[0].Path != "/" {
+			t.Fatalf("登入與清除 Cookie 都應使用 Secure、HttpOnly 與根路徑：%v", cookies)
+		}
+		if clear && cookies[0].MaxAge >= 0 {
+			t.Fatal("登出 Cookie 應立即失效")
+		}
+	}
+}
+
 func TestNetworkLimiterAllowsConfiguredRange(t *testing.T) {
 	limiter := newNetworkLimiter("192.168.50.0~192.168.50.255")
 

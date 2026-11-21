@@ -44,7 +44,7 @@
 
   const recordSearchHistory = (keyword) => {
     keyword = String(keyword || "").trim();
-    if (!keyword) return;
+    if (input.dataset.authenticated !== "true" || !keyword) return;
     fetch("/api/search-history", {
       method: "POST",
       headers: {
@@ -84,9 +84,13 @@
   };
 
   const refreshSearchHistory = async () => {
-    if (!searchHistoryPanel || !searchHistorySuggestions || document.activeElement !== input) return;
+    if (input.dataset.authenticated !== "true" || !searchHistoryPanel || !searchHistorySuggestions || document.activeElement !== input) return;
+    const keyword = input.value.trim();
+    if (!keyword) {
+      hideSearchHistory();
+      return;
+    }
     try {
-      const keyword = input.value.trim();
       const items = await requestJSON(`/api/search-history?q=${encodeURIComponent(keyword)}&limit=10`);
       renderSearchHistory(items || []);
     } catch (_) {
@@ -221,7 +225,6 @@
 
   input.addEventListener("input", applyFilters);
   input.addEventListener("input", queueSearchHistoryRefresh);
-  input.addEventListener("focus", refreshSearchHistory);
 
   document.addEventListener("click", (event) => {
     if (event.target === input || event.target.closest("#search-history-panel")) return;

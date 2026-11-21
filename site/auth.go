@@ -134,11 +134,11 @@ func (auth *authService) setSession(c *gin.Context, username string) {
 	expiresAt := strconv.FormatInt(time.Now().Add(sessionDuration).Unix(), 10)
 	signature := auth.sessionSignature(username, expiresAt)
 	token := base64.RawURLEncoding.EncodeToString([]byte(username + "|" + expiresAt + "|" + signature))
-	c.SetCookie(adminSessionCookie, token, int(sessionDuration.Seconds()), "/", "", false, true)
+	c.SetCookie(adminSessionCookie, token, int(sessionDuration.Seconds()), "/", "", true, true)
 }
 
 func (auth *authService) clearSession(c *gin.Context) {
-	c.SetCookie(adminSessionCookie, "", -1, "/", "", false, true)
+	c.SetCookie(adminSessionCookie, "", -1, "/", "", true, true)
 }
 
 func (auth *authService) sessionSignature(username, expiresAt string) string {

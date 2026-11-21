@@ -1,6 +1,6 @@
 module github.com/samliao/sam-nav
 
-go 1.26.3
+go 1.26.11
 
 require github.com/gin-gonic/gin v1.10.1
 

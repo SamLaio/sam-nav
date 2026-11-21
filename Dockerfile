@@ -1,6 +1,6 @@
 ARG SAM_NAV_BUILD_HASH=""
 
-FROM golang:1.26.3-alpine AS sam-nav-build
+FROM golang:1.26.11-alpine3.24 AS sam-nav-build
 
 WORKDIR /src
 
@@ -10,7 +10,7 @@ RUN go mod download
 COPY ./site ./
 RUN CGO_ENABLED=0 GOOS=linux go build -o /out/sam-nav .
 
-FROM alpine:3.20
+FROM alpine:3.24
 
 ARG SAM_NAV_BUILD_HASH=""
 
@@ -23,7 +23,7 @@ COPY --from=sam-nav-build /out/sam-nav /usr/local/bin/sam-nav
 
 ENV SAM_NAV_BUILD_HASH=${SAM_NAV_BUILD_HASH}
 
-LABEL org.opencontainers.image.version="v0.8.0"
+LABEL org.opencontainers.image.version="v0.9.0"
 
 EXPOSE 6412
 

@@ -47,3 +47,6 @@ memo*.txt
 docker-compose-online.yml
 
 data
+
+# Graft 本機索引可重新產生，不提交。
+/graft/

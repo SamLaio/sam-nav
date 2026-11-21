@@ -19,7 +19,7 @@
     </header>
 
     <section class="search-row">
-      <input id="site-search" type="search" autocomplete="off" autofocus placeholder="{{ t "search_placeholder" }}" data-search-engine-url="{{ .Settings.SearchEngineURL }}">
+      <input id="site-search" type="search" autocomplete="off" autofocus placeholder="{{ t "search_placeholder" }}" data-search-engine-url="{{ .Settings.SearchEngineURL }}" data-authenticated="{{ .Authenticated }}">
       <section id="search-history-panel" class="search-history-panel" hidden>
         <div class="panel-title">{{ t "search_history_title" }}</div>
         <div id="search-history-suggestions" class="search-history-suggestions"></div>

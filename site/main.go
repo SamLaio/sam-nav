@@ -21,6 +21,7 @@ import (
 var siteFS embed.FS
 
 type pageData struct {
+	Authenticated bool
 	Title         string
 	Version       string
 	BuildHash     string
@@ -56,7 +57,7 @@ func main() {
 
 	languageProvider := newLanguageProvider(env("SAM_NAV_LANG", defaultLanguageName))
 	text := languageProvider.text
-	appVersion := env("SAM_NAV_VERSION", "v0.8.0")
+	appVersion := env("SAM_NAV_VERSION", "v0.9.0")
 	appBuildHash := buildHash()
 
 	dataDir := env("SAM_NAV_DATA_DIR", "./data")
@@ -123,6 +124,7 @@ func main() {
 		}
 
 		c.HTML(http.StatusOK, "home.html", pageData{
+			Authenticated: includeHidden,
 			Title:         settings.SiteTitle,
 			Version:       appVersion,
 			BuildHash:     appBuildHash,
@@ -188,7 +190,7 @@ func main() {
 	registerLinkRoutes(router, adminAPI, db, text, iconCacheDir)
 	registerCategoryRoutes(adminAPI, db, text)
 	registerSearchEngineRoutes(adminAPI, db, text)
-	registerSearchHistoryRoutes(router, adminAPI, db, text)
+	registerSearchHistoryRoutes(router, adminAPI, db, text, auth)
 	registerSettingsRoutes(router, adminAPI, db, text, languageProvider.useLanguage)
 	registerBackupRoutes(adminAPI, db, text, languageProvider.useLanguage, iconCacheDir)
 
